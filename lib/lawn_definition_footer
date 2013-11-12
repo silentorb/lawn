@@ -1,0 +1,3 @@
+declare module "lawn" {
+  export = Lawn
+}

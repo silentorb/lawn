@@ -1,0 +1,12 @@
+{
+  "name": "lawn",
+  "version": "0.0.0",
+  "description": "Vineyard Node.js server",
+  "main": "lawn.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/silentorb/lawn.git"
+  },
+  "author": "Christopher W. Johnson",
+  "license": "MIT"
+}

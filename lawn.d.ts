@@ -40,6 +40,3 @@ declare module Lawn {
         public stop(): void;
     }
 }
-declare module "lawn" {
-  export = Lawn
-}

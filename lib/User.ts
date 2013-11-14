@@ -1,7 +1,4 @@
-/**
- * User: Chris Johnson
- * Date: 10/3/13
- */
+
 module Lawn {
   export interface IUser {
     uid?

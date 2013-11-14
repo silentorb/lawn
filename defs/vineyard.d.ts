@@ -1,9 +1,7 @@
 /// <reference path="ground.d.ts" />
 /// <reference path="metahub.d.ts" />
 declare class Vineyard {
-    public bulbs: {
-        [name: string]: Vineyard.Bulb;
-    };
+    public bulbs: any;
     public config;
     public config_folder;
     public ground: Ground.Core;

@@ -34,7 +34,7 @@ module.exports = function (grunt) {
       "lawn-def": {
         src: [
           'lawn.d.ts',
-          'lib/fortress_definition_footer'
+          'lib/lawn_definition_footer'
         ],
         dest: 'lawn.d.ts'
       }
@@ -53,10 +53,6 @@ module.exports = function (grunt) {
             to: ""
           },
           {
-            from: '/// <reference path="socket.io.extension.d.ts" />',
-            to: ""
-          },
-          {
             from: '/// <reference path="express.d.ts" />',
             to: ""
           }
@@ -67,13 +63,15 @@ module.exports = function (grunt) {
       "lawn-def": {
         files: [
           { src: 'lawn.d.ts', dest: '../../defs/'},
+          { src: 'lawn.d.ts', dest: '../plantlab/defs/'}
+
         ]
       }
     },
     watch: {
       lawn: {
         files: 'lib/**/*.ts',
-        tasks: ['lawn']
+        tasks: ['default']
       }
     }
   })

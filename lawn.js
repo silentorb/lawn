@@ -274,4 +274,4 @@ var Lawn;
 })(Lawn || (Lawn = {}));
 require('source-map-support').install();
 //# sourceMappingURL=lawn.js.map
-module.exports = Lawn.Server
+module.exports = Lawn

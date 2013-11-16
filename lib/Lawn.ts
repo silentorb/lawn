@@ -7,7 +7,7 @@
 /// <reference path="references.ts"/>
 declare var Irrigation
 
-class Lawn extends Vineyard.Bulb {
+export class Lawn extends Vineyard.Bulb {
   io // Socket IO
   instance_sockets = {}
   instance_user_sockets = {}

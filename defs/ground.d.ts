@@ -331,24 +331,6 @@ declare module Ground {
         public query(): string;
     }
 }
-declare module Ground {
-    interface Query_Request {
-        trellis: string;
-        filters?: Ground.Query_Filter[];
-        sorts?: Ground.Query_Sort[];
-        expansions?: string[];
-        reductions?: string[];
-    }
-    interface Update_Request {
-        objects: any[];
-    }
-    class Irrigation {
-        public ground: Ground.Core;
-        constructor(ground: Ground.Core);
-        public query(request: Query_Request): Promise;
-        public update(request: Update_Request, uid?): Promise;
-    }
-}
 declare module "ground" {
   export = Ground
 }

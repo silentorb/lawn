@@ -44,10 +44,15 @@ module Lawn {
 
       if (vineyard) {
         var fortress = vineyard.bulbs.fortress
-        if (!fortress.query_access(query)) {
-          return when.resolve([])
-        }
+        return fortress.query_access(query)
+          .then((access)=> {
+            if (access)
+              return query.run();
+            else
+              return when.resolve([])
+          }
       }
+
       return query.run();
     }
 

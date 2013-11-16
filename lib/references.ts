@@ -9,6 +9,3 @@
 /// <reference path="../defs/ground.d.ts"/>
 /// <reference path="../defs/vineyard.d.ts"/>
 
-///<reference path="Lawn.ts"/>
-///<reference path="User.ts"/>
-/// <reference path="Irrigation.ts"/>

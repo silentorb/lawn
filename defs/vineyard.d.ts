@@ -23,6 +23,24 @@ declare module Vineyard {
         public stop(): void;
     }
 }
+declare module Vineyard {
+    interface IUser {
+        id?;
+        name?: string;
+        roles?: IRole[];
+    }
+    interface IRole {
+        id?;
+        name?: string;
+    }
+    class User {
+        public id: number;
+        public name: string;
+        public session;
+        constructor(source: IUser);
+        public simple(): IUser;
+    }
+}
 declare module "vineyard" {
   export = Vineyard
 }

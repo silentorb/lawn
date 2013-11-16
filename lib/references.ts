@@ -11,3 +11,4 @@
 
 ///<reference path="Lawn.ts"/>
 ///<reference path="User.ts"/>
+/// <reference path="Irrigation.ts"/>

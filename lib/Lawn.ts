@@ -5,12 +5,12 @@
 ///<reference path="../defs/socket.io.extension.d.ts"/>
 ///<reference path="../defs/express.d.ts"/>
 /// <reference path="references.ts"/>
+declare var Irrigation
 
 class Lawn extends Vineyard.Bulb {
   io // Socket IO
   instance_sockets = {}
   instance_user_sockets = {}
-  irrigation:Ground.Irrigation
   private app:ExpressApplication
   fs
   config
@@ -28,49 +28,31 @@ class Lawn extends Vineyard.Bulb {
 //      return this.ground.db.query("INSERT INTO debug (source, message, time) VALUES ('server', '" + text + "', " + time + ")");
   }
 
-  get_user_socket(uid:number):Socket {
-    return this.instance_user_sockets[uid]
+  get_user_socket(id:number):Socket {
+    return this.instance_user_sockets[id]
   }
 
   initialize_session(socket, user) {
     var _this = this;
     this.instance_sockets[socket.id] = socket
-    this.instance_user_sockets[user.uid] = socket
+    this.instance_user_sockets[user.id] = socket
 //      socket.emit('login-success', {
 //        user: user.simple()
 //      });
-    user.socket = socket
     socket.join('test room')
-//    socket.on('message', function (data) {
-//      return _this.messaging.send_message(data.room_id, data.data, user, socket);
-//    });
-//    socket.on('friends', function (respond) {
-//      return _this.user.get_friends(_this, function (friends) {
-//        return respond(friends);
-//      });
-//    });
 
     socket.on('query', (request, callback)=> {
-      this.irrigation.query(request)
+      Irrigation.query(request, this.ground, this.vineyard)
         .then((response)=> callback(response))
     })
 
     socket.on('update', (request, callback)=> {
       console.log('vineyard update:', request)
-      this.irrigation.update(request, user.uid)
+      Irrigation.update(request, user.guid, this.ground, this.vineyard)
         .then((response)=> callback(response))
     })
 
-//      if (this.get_user_sockets(user.uid).length === 1) {
-//        this.debug('notifying');
-//        this.notify.send_online_changed(user, true);
-//      }
-
-    console.log(process.pid, 'Logged in: ' + user.uid)
-  }
-
-  grow() {
-    this.irrigation = new Ground.Irrigation(this.ground)
+    console.log(process.pid, 'Logged in: ' + user.id)
   }
 
   start() {
@@ -84,20 +66,24 @@ class Lawn extends Vineyard.Bulb {
       return socket.emit('error', {
         'message': 'Missing token.'
       });
-
-    return this.ground.db.query_single("SELECT  * FROM sessions WHERE token = '" + data.token + "'")
+    var query = this.ground.create_query('session')
+    query.add_key_filter(data.token)
+    query.add_property_filter('user', data.user)
+    return query.run_single()
       .then((session) => {
         if (!session) {
           return socket.emit('error', {
             'message': 'Session not found.'
           });
         }
-        if (session.uid === 0) {
+        if (session.id === 0) {
           return socket.emit('error', {
             'message': 'Invalid session.'
           });
         }
-        return this.ground.db.query_single("SELECT * FROM users WHERE uid = " + session.uid)
+        var query = this.ground.create_query('user')
+        query.add_key_filter(data.user)
+        return query.run_single()
           .then((user_record) => {
             if (!user_record) {
               socket.emit('error', {
@@ -106,8 +92,9 @@ class Lawn extends Vineyard.Bulb {
               return;
             }
             var user = socket.user = user_record;
-            user.session = session;
+//            user.session = session;
             this.initialize_session(socket, user);
+            console.log('user', user_record)
             callback(user_record)
           });
       },
@@ -128,9 +115,9 @@ class Lawn extends Vineyard.Bulb {
       this.debug('***detected disconnect');
       user = socket.user;
       delete this.instance_sockets[socket.id];
-      if (user && !this.get_user_socket(user.uid)) {
+      if (user && !this.get_user_socket(user.id)) {
         console.log('good', user.simple());
-        this.debug(user.uid);
+        this.debug(user.id);
         data = user.simple();
         data.online = false;
 //        return Server.notify.send_online_changed(user, false);
@@ -141,15 +128,6 @@ class Lawn extends Vineyard.Bulb {
 //    start(http_port = null, socket_port = null) {
 //      this.start_http(http_port || this.config.ports.http);
 //      this.start_sockets(socket_port || this.config.ports.websocket);
-//    }
-
-//    start_redis() {
-//      this.redis_client = true
-//      console.log('r')
-////      if (!this.redis_client) {
-////        var redis = require("socket.io/node_modules/redis")
-////        this.redis_client = redis.createClient()
-////      }
 //    }
 
   start_sockets(port = null) {
@@ -184,7 +162,10 @@ class Lawn extends Vineyard.Bulb {
     }
   }
 
-  start_http(port = null) {
+  start_http(port) {
+    if (!port)
+      return
+
     var express = require('express');
     var app = this.app = express();
 
@@ -197,7 +178,7 @@ class Lawn extends Vineyard.Bulb {
 
     var user;
     app.post('/vineyard/login', (req, res)=> {
-      this.ground.db.query("SELECT uid, name FROM users WHERE name = ? AND pass = ?", [req.body.name, req.body.pass])
+      this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND pass = ?", [req.body.name, req.body.pass])
         .then((rows)=> {
           if (rows.length == 0) {
             return res.status(401).send('Invalid login info.')
@@ -206,18 +187,18 @@ class Lawn extends Vineyard.Bulb {
           user = rows[0];
 
           var session = [
-            user.uid,
+            user.id,
             req.sessionID,
             req.host,
             Math.round(new Date().getTime() / 1000)
           ]
-          this.ground.db.query("REPLACE INTO sessions (uid, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
+          this.ground.db.query("REPLACE INTO sessions (id, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
             .then(()=> {
               res.send({
                 token: req.sessionID,
                 message: 'Login successful',
                 user: {
-                  uid: user.uid,
+                  id: user.id,
                   name: user.name
                 }
               });
@@ -242,11 +223,11 @@ class Lawn extends Vineyard.Bulb {
 
         // !!! Add check if file already exists
         this.ground.update_object('file', {
-          guid: info.id,
+          gid: info.id,
           name: filename,
           path: path,
           size: file.size
-        }, user.uid)
+        }, user.id)
           .then((object)=> res.send({file: object}))
       }
     )
@@ -271,6 +252,7 @@ class Lawn extends Vineyard.Bulb {
     })
     port = port || this.config.ports.http
     console.log('HTTP listening on port ' + port + '.')
+
     app.listen(port)
   }
 

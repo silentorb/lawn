@@ -1,23 +1,23 @@
 
 module Lawn {
   export interface IUser {
-    uid?
+    id?
     name?:string
   }
 
   export class User {
-    uid:number;
+    id:number;
     name:string;
     session;
 
     constructor(source:IUser) {
-      this.uid = source.uid || 0;
+      this.id = source.id || 0;
       this.name = source.name || '';
     }
 
     simple():IUser {
       return {
-        uid: this.uid,
+        uid: this.id,
         name: this.name
       };
     }

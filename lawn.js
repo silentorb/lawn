@@ -1,4 +1,4 @@
-var MetaHub = require('metahub');var Ground = require('ground');var Vineyard = require('vineyard');var __extends = this.__extends || function (d, b) {
+var MetaHub = require('metahub');var Ground = require('ground');var Vineyard = require('vineyard');var when = require('when');var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
@@ -25,37 +25,32 @@ var Lawn = (function (_super) {
         console.log(text);
     };
 
-    Lawn.prototype.get_user_socket = function (uid) {
-        return this.instance_user_sockets[uid];
+    Lawn.prototype.get_user_socket = function (id) {
+        return this.instance_user_sockets[id];
     };
 
     Lawn.prototype.initialize_session = function (socket, user) {
         var _this = this;
         var _this = this;
         this.instance_sockets[socket.id] = socket;
-        this.instance_user_sockets[user.uid] = socket;
+        this.instance_user_sockets[user.id] = socket;
 
-        user.socket = socket;
         socket.join('test room');
 
         socket.on('query', function (request, callback) {
-            _this.irrigation.query(request).then(function (response) {
+            Irrigation.query(request, _this.ground, _this.vineyard).then(function (response) {
                 return callback(response);
             });
         });
 
         socket.on('update', function (request, callback) {
             console.log('vineyard update:', request);
-            _this.irrigation.update(request, user.uid).then(function (response) {
+            Irrigation.update(request, user.guid, _this.ground, _this.vineyard).then(function (response) {
                 return callback(response);
             });
         });
 
-        console.log(process.pid, 'Logged in: ' + user.uid);
-    };
-
-    Lawn.prototype.grow = function () {
-        this.irrigation = new Ground.Irrigation(this.ground);
+        console.log(process.pid, 'Logged in: ' + user.id);
     };
 
     Lawn.prototype.start = function () {
@@ -70,19 +65,23 @@ var Lawn = (function (_super) {
             return socket.emit('error', {
                 'message': 'Missing token.'
             });
-
-        return this.ground.db.query_single("SELECT  * FROM sessions WHERE token = '" + data.token + "'").then(function (session) {
+        var query = this.ground.create_query('session');
+        query.add_key_filter(data.token);
+        query.add_property_filter('user', data.user);
+        return query.run_single().then(function (session) {
             if (!session) {
                 return socket.emit('error', {
                     'message': 'Session not found.'
                 });
             }
-            if (session.uid === 0) {
+            if (session.id === 0) {
                 return socket.emit('error', {
                     'message': 'Invalid session.'
                 });
             }
-            return _this.ground.db.query_single("SELECT * FROM users WHERE uid = " + session.uid).then(function (user_record) {
+            var query = _this.ground.create_query('user');
+            query.add_key_filter(data.user);
+            return query.run_single().then(function (user_record) {
                 if (!user_record) {
                     socket.emit('error', {
                         'message': 'User not found.'
@@ -90,8 +89,9 @@ var Lawn = (function (_super) {
                     return;
                 }
                 var user = socket.user = user_record;
-                user.session = session;
+
                 _this.initialize_session(socket, user);
+                console.log('user', user_record);
                 callback(user_record);
             });
         }, function (error) {
@@ -114,9 +114,9 @@ var Lawn = (function (_super) {
             _this.debug('***detected disconnect');
             user = socket.user;
             delete _this.instance_sockets[socket.id];
-            if (user && !_this.get_user_socket(user.uid)) {
+            if (user && !_this.get_user_socket(user.id)) {
                 console.log('good', user.simple());
-                _this.debug(user.uid);
+                _this.debug(user.id);
                 data = user.simple();
                 data.online = false;
             }
@@ -159,8 +159,10 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.start_http = function (port) {
-        if (typeof port === "undefined") { port = null; }
         var _this = this;
+        if (!port)
+            return;
+
         var express = require('express');
         var app = this.app = express();
 
@@ -173,7 +175,7 @@ var Lawn = (function (_super) {
 
         var user;
         app.post('/vineyard/login', function (req, res) {
-            _this.ground.db.query("SELECT uid, name FROM users WHERE name = ? AND pass = ?", [req.body.name, req.body.pass]).then(function (rows) {
+            _this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND pass = ?", [req.body.name, req.body.pass]).then(function (rows) {
                 if (rows.length == 0) {
                     return res.status(401).send('Invalid login info.');
                 }
@@ -181,17 +183,17 @@ var Lawn = (function (_super) {
                 user = rows[0];
 
                 var session = [
-                    user.uid,
+                    user.id,
                     req.sessionID,
                     req.host,
                     Math.round(new Date().getTime() / 1000)
                 ];
-                _this.ground.db.query("REPLACE INTO sessions (uid, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session).then(function () {
+                _this.ground.db.query("REPLACE INTO sessions (id, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session).then(function () {
                     res.send({
                         token: req.sessionID,
                         message: 'Login successful',
                         user: {
-                            uid: user.uid,
+                            id: user.id,
                             name: user.name
                         }
                     });
@@ -215,11 +217,11 @@ var Lawn = (function (_super) {
             _this.fs.rename(file.path, filepath);
 
             _this.ground.update_object('file', {
-                guid: info.id,
+                gid: info.id,
                 name: filename,
                 path: path,
                 size: file.size
-            }, user.uid).then(function (object) {
+            }, user.id).then(function (object) {
                 return res.send({ file: object });
             });
         });
@@ -243,6 +245,7 @@ var Lawn = (function (_super) {
         });
         port = port || this.config.ports.http;
         console.log('HTTP listening on port ' + port + '.');
+
         app.listen(port);
     };
 
@@ -259,12 +262,12 @@ var Lawn;
 (function (Lawn) {
     var User = (function () {
         function User(source) {
-            this.uid = source.uid || 0;
+            this.id = source.id || 0;
             this.name = source.name || '';
         }
         User.prototype.simple = function () {
             return {
-                uid: this.uid,
+                uid: this.id,
                 name: this.name
             };
         };
@@ -272,6 +275,62 @@ var Lawn;
     })();
     Lawn.User = User;
 })(Lawn || (Lawn = {}));
+var Lawn;
+(function (Lawn) {
+    var Irrigation = (function () {
+        function Irrigation() {
+        }
+        Irrigation.query = function (request, ground, vineyard) {
+            var i, trellis = ground.sanitize_trellis_argument(request.trellis);
+            var query = new Ground.Query(trellis);
+
+            if (request.filters) {
+                for (i = 0; i < request.filters.length; ++i) {
+                    var filter = request.filters[i];
+                    query.add_property_filter(filter.property, filter.value, filter.operator);
+                }
+            }
+
+            if (request.sorts) {
+                for (i = 0; i < request.sorts.length; ++i) {
+                    query.add_sort(request.sorts[i]);
+                }
+            }
+
+            if (request.expansions) {
+                for (i = 0; i < request.expansions.length; ++i) {
+                    query.expansions.push(request.expansions[i]);
+                }
+            }
+
+            if (vineyard) {
+                var fortress = vineyard.bulbs.fortress;
+                if (!fortress.query_access(query)) {
+                    return when.resolve([]);
+                }
+            }
+            return query.run();
+        };
+
+        Irrigation.update = function (request, uid, ground, vineyard) {
+            var promises = [];
+
+            if (!request.objects)
+                throw new Error('Request requires an objects array.');
+
+            for (var i = 0; i < request.objects.length; ++i) {
+                var object = request.objects[i];
+                var promise = ground.update_object(object.trellis, object, uid);
+                promises.push(promise);
+            }
+
+            return when.all(promises);
+        };
+        return Irrigation;
+    })();
+    Lawn.Irrigation = Irrigation;
+})(Lawn || (Lawn = {}));
 require('source-map-support').install();
 //# sourceMappingURL=lawn.js.map
 module.exports = Lawn
+var Irrigation = Lawn.Irrigation

@@ -93,10 +93,6 @@ declare module Ground {
         public ground: Ground.Core;
         public main_table: string;
         public joins: string[];
-        public filters: string[];
-        public property_filters: {
-            [name: string]: Query_Filter;
-        };
         public post_clauses: any[];
         public limit: string;
         public trellis: Ground.Trellis;
@@ -107,6 +103,8 @@ declare module Ground {
         public arguments: {};
         public expansions: string[];
         public wrappers: Query_Wrapper[];
+        private filters;
+        private property_filters;
         static operators: string[];
         private links;
         constructor(trellis: Ground.Trellis, base_path?: string);
@@ -134,13 +132,13 @@ declare module Ground {
         public process_row(row, authorized_properties?): Promise;
         public process_property_filter(filter): Internal_Query_Source;
         public process_property_filters(): Internal_Query_Source;
-        public run(args?: {}): Promise;
-        public run_single(args?: {}): Promise;
+        public run(): Promise;
+        public run_single(): Promise;
     }
 }
 declare var uuid;
 declare module Ground {
-    class Update {
+    class Update implements Ground.IUpdate {
         public seed: Ground.ISeed;
         private fields;
         public override: boolean;
@@ -149,9 +147,10 @@ declare module Ground {
         public ground: Ground.Core;
         public db: Ground.Database;
         public is_service: boolean;
-        public user_id;
+        public user;
         public log_queries: boolean;
         constructor(trellis: Ground.Trellis, seed: Ground.ISeed, ground?: Ground.Core);
+        public get_access_name(): string;
         private generate_sql(trellis);
         private update_embedded_seed(trellis, property, value);
         private create_record(trellis);
@@ -169,8 +168,12 @@ declare module Ground {
     }
 }
 declare module Ground {
-    class Delete {
-        public run(trellis: Ground.Trellis, seed: Ground.ISeed): Promise;
+    class Delete implements Ground.IUpdate {
+        public trellis: Ground.Trellis;
+        public seed: Ground.ISeed;
+        constructor(trellis: Ground.Trellis, seed: Ground.ISeed);
+        public get_access_name(): string;
+        public run(): Promise;
     }
 }
 declare module Ground {
@@ -195,6 +198,10 @@ declare module Ground {
     interface ISeed {
         _deleted?;
     }
+    interface IUpdate {
+        run: () => Promise;
+        get_access_name(): string;
+    }
     class Property_Type {
         public name: string;
         public property_class;
@@ -218,12 +225,13 @@ declare module Ground {
         public get_base_property_type(type);
         public convert_value(value, type);
         public create_query(trellis_name: string, base_path?: string): Ground.Query;
+        public create_update(trellis, seed?: ISeed, user?): IUpdate;
         public delete_object(trellis: Ground.Trellis, seed: ISeed): Promise;
         public initialize_trellises(subset: Ground.Trellis[], all?): void;
         public insert_object(trellis, seed?: ISeed, uid?, as_service?: boolean): Promise;
         static is_private(property: Ground.Property): boolean;
         static is_private_or_readonly(property: Ground.Property): boolean;
-        public update_object(trellis, seed?: ISeed, uid?, as_service?: boolean): Promise;
+        public update_object(trellis, seed?: ISeed, user?, as_service?: boolean): Promise;
         static load_json_from_file(filename: string);
         public load_property_types(filename: string): void;
         public load_schema_from_file(filename: string): void;
@@ -289,8 +297,8 @@ declare module Ground {
         public generate_insert(seeds: {}): string;
         private generate_table_name();
         public get_condition(key: Identity_Key, seed): string;
-        public get_condition_string(seeds: {}): string;
-        public get_conditions(seeds: {}): string[];
+        public get_condition_string(seeds): string;
+        public get_conditions(seeds): string[];
     }
 }
 declare module Ground {

@@ -1,5 +1,4 @@
 /// <reference path="when.d.ts" />
-declare var when;
 declare module MetaHub {
     function remove(array, item): void;
     function has_properties(obj): boolean;
@@ -26,7 +25,7 @@ declare module MetaHub {
         public listen(other: Meta_Object, name: string, method: (...args: any[]) => any, options?): void;
         public unlisten(other, name): void;
         public invoke(name: string, ...args: any[]): Promise;
-        public invoke_async(name): void;
+        public map_invoke(name: string, ...args: any[]): Promise[];
         public gather(name);
         public connect(other: Meta_Object, type: string, other_type?: string): void;
         public disconnect(other): void;

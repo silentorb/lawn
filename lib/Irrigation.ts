@@ -19,7 +19,7 @@ module Lawn {
   }
 
   export class Irrigation {
-    static query(request:Query_Request, ground:Ground.Core, vineyard:Vineyard):Promise {
+    static query(request:Query_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
       var i, trellis = ground.sanitize_trellis_argument(request.trellis);
       var query = new Ground.Query(trellis);
 
@@ -42,33 +42,36 @@ module Lawn {
         }
       }
 
-      if (vineyard) {
-        var fortress = vineyard.bulbs.fortress
-        return fortress.query_access(query)
-          .then((access)=> {
-            if (access)
-              return query.run();
-            else
-              return when.resolve([])
-          }
-      }
-
-      return query.run();
+      var fortress = vineyard.bulbs.fortress
+      return fortress.query_access(user, query)
+        .then((access)=> {
+          if (access)
+            return query.run();
+          else
+            throw new Error('Unauthorized')
+        })
     }
 
-    static update(request:Update_Request, uid, ground:Ground.Core, vineyard:Vineyard):Promise {
-      var promises:Promise[] = [];
+    static update(request:Update_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      var updates = request.objects.map((object)=>
+          ground.create_update(object.trellis, object, user)
+      )
 
       if (!request.objects)
         throw new Error('Request requires an objects array.');
 
-      for (var i = 0; i < request.objects.length; ++i) {
-        var object = request.objects[i];
-        var promise = ground.update_object(object.trellis, object, uid);
-        promises.push(promise);
-      }
+      var fortress = vineyard.bulbs.fortress
+      return fortress.update_access(user, updates)
+        .then((access)=> {
+          if (access) {
+            var update_promises = updates.map((update) => update.run())
+            return when.all(update_promises)
+          }
+          else
+            throw new Error('Unauthorized')
+        })
 
-      return when.all(promises)
+
     }
   }
 }

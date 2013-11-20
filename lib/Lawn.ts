@@ -1,13 +1,13 @@
-/**
- * User: Chris Johnson
- * Date: 10/2/13
- */
 ///<reference path="../defs/socket.io.extension.d.ts"/>
 ///<reference path="../defs/express.d.ts"/>
 /// <reference path="references.ts"/>
 declare var Irrigation
 
-export class Lawn extends Vineyard.Bulb {
+module Lawn {
+
+}
+
+class Lawn extends Vineyard.Bulb {
   io // Socket IO
   instance_sockets = {}
   instance_user_sockets = {}
@@ -35,21 +35,34 @@ export class Lawn extends Vineyard.Bulb {
   initialize_session(socket, user) {
     var _this = this;
     this.instance_sockets[socket.id] = socket
-    this.instance_user_sockets[user.id] = socket
-//      socket.emit('login-success', {
-//        user: user.simple()
-//      });
+    this.instance_user_sockets[user.guid] = socket
     socket.join('test room')
 
     socket.on('query', (request, callback)=> {
-      Irrigation.query(request, this.ground, this.vineyard)
-        .then((response)=> callback(response))
+      Irrigation.query(request, user, this.ground, this.vineyard)
+        .then((objects)=> callback({ code: 200, 'message': 'Success', objects: objects }),
+        (error)=> {
+          callback({ code: 403, 'message': 'You are not authorized to perform this query.', objects: [] })
+          socket.emit('error', {
+            'code': 401,
+            'message': 'Unauthorized',
+            request: request
+          })
+        })
     })
 
     socket.on('update', (request, callback)=> {
       console.log('vineyard update:', request)
-      Irrigation.update(request, user.guid, this.ground, this.vineyard)
-        .then((response)=> callback(response))
+      Irrigation.update(request, user, this.ground, this.vineyard)
+        .then((objects)=> callback({ code: 200, 'message': 'Success',  objects: objects}),
+        (error)=> {
+          callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [] })
+          socket.emit('error', {
+            'code': 401,
+            'message': 'Unauthorized',
+            request: request
+          })
+        })
     })
 
     console.log(process.pid, 'Logged in: ' + user.id)
@@ -68,7 +81,6 @@ export class Lawn extends Vineyard.Bulb {
       });
     var query = this.ground.create_query('session')
     query.add_key_filter(data.token)
-    query.add_property_filter('user', data.user)
     return query.run_single()
       .then((session) => {
         if (!session) {
@@ -116,19 +128,13 @@ export class Lawn extends Vineyard.Bulb {
       user = socket.user;
       delete this.instance_sockets[socket.id];
       if (user && !this.get_user_socket(user.id)) {
-        console.log('good', user.simple());
         this.debug(user.id);
-        data = user.simple();
+        data = user
         data.online = false;
 //        return Server.notify.send_online_changed(user, false);
       }
     });
   }
-
-//    start(http_port = null, socket_port = null) {
-//      this.start_http(http_port || this.config.ports.http);
-//      this.start_sockets(socket_port || this.config.ports.websocket);
-//    }
 
   start_sockets(port = null) {
     var socket_io = require('socket.io')

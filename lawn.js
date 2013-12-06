@@ -236,7 +236,7 @@ var Lawn = (function (_super) {
                     name: filename,
                     path: file.path,
                     size: file.size
-                }, user.id).then(function (object) {
+                }, user).then(function (object) {
                     return res.send({ file: object });
                 });
             }, function (error) {

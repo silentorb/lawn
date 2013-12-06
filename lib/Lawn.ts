@@ -250,7 +250,7 @@ class Lawn extends Vineyard.Bulb {
             name: filename,
             path: file.path,
             size: file.size
-          }, user.id)
+          }, user)
             .then((object)=> res.send({file: object}))
         },
         (error)=> res.status(error.status).send(error.message)

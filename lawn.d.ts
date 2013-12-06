@@ -19,6 +19,7 @@ declare class Lawn extends Vineyard.Bulb {
     public get_user_socket(id: number): Socket;
     public initialize_session(socket, user): void;
     public start(): void;
+    public get_user_from_session(token: string): Promise;
     public login(data, socket: ISocket, callback): {};
     public on_connection(socket: ISocket): Socket;
     public start_sockets(port?): void;
@@ -26,18 +27,11 @@ declare class Lawn extends Vineyard.Bulb {
     public stop(): void;
 }
 declare module Lawn {
-    interface Query_Request {
-        trellis: string;
-        filters?: Ground.Query_Filter[];
-        sorts?: Ground.Query_Sort[];
-        expansions?: string[];
-        reductions?: string[];
-    }
     interface Update_Request {
         objects: any[];
     }
     class Irrigation {
-        static query(request: Query_Request, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
+        static query(request: Ground.External_Query_Source, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
         static update(request: Update_Request, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
     }
 }

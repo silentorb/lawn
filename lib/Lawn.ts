@@ -35,7 +35,7 @@ class Lawn extends Vineyard.Bulb {
   initialize_session(socket, user) {
     var _this = this;
     this.instance_sockets[socket.id] = socket
-    this.instance_user_sockets[user.guid] = socket
+    this.instance_user_sockets[user.id] = socket
     socket.join('test room')
 
     socket.on('query', (request, callback)=> {
@@ -54,7 +54,7 @@ class Lawn extends Vineyard.Bulb {
     socket.on('update', (request, callback)=> {
       console.log('vineyard update:', request)
       Irrigation.update(request, user, this.ground, this.vineyard)
-        .then((objects)=> callback({ code: 200, 'message': 'Success',  objects: objects}),
+        .then((objects)=> callback({ code: 200, 'message': 'Success', objects: objects}),
         (error)=> {
           callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [] })
           socket.emit('error', {
@@ -73,48 +73,57 @@ class Lawn extends Vineyard.Bulb {
     this.start_sockets(this.config.ports.websocket);
   }
 
+  get_user_from_session(token:string):Promise {
+    var query = this.ground.create_query('session')
+    query.add_key_filter(token)
+    return query.run_single()
+      .then((session) => {
+        console.log('session', session)
+        if (!session)
+          return when.reject({status: 401, message: 'Session not found.' })
+
+        if (session.token === 0)
+          return when.reject({status: 401, message: 'Invalid session.' })
+
+        if (typeof session.user !== 'object')
+          return when.reject({status: 401, message: 'User not found.' })
+
+        return {
+          id: session.user.id,
+          name: session.user.name
+        }
+
+//        var query = this.ground.create_query('user')
+//        query.add_key_filter(session.user)
+//        return query.run_single()
+//          .then((user_record) => {
+//            if (!user_record)
+//              return when.reject({status: 401, message: 'User not found.' })
+//
+//            return user_record
+//          });
+      })
+  }
+
   login(data, socket:ISocket, callback) {
     console.log('message2', data);
     if (!data.token)
-      return socket.emit('error', {
-        'message': 'Missing token.'
-      });
+      return socket.emit('error', { message: 'Missing token.' })
+
     var query = this.ground.create_query('session')
     query.add_key_filter(data.token)
-    return query.run_single()
-      .then((session) => {
-        if (!session) {
-          return socket.emit('error', {
-            'message': 'Session not found.'
-          });
-        }
-        if (session.id === 0) {
-          return socket.emit('error', {
-            'message': 'Invalid session.'
-          });
-        }
-        var query = this.ground.create_query('user')
-        query.add_key_filter(data.user)
-        return query.run_single()
-          .then((user_record) => {
-            if (!user_record) {
-              socket.emit('error', {
-                'message': 'User not found.'
-              });
-              return;
-            }
-            var user = socket.user = user_record;
+
+    return this.get_user_from_session(data.token)
+      .then((user)=> {
 //            user.session = session;
-            this.initialize_session(socket, user);
-            console.log('user', user_record)
-            callback(user_record)
-          });
+        this.initialize_session(socket, user);
+        console.log('user', user)
+        callback(user)
       },
-      (error) => {
-        return socket.emit('error', {
-          'message': error
-        });
-      });
+      (error)=> socket.emit('error', {
+        'message': 'Invalid session.'
+      })
+    )
   }
 
   on_connection(socket:ISocket) {
@@ -148,6 +157,7 @@ class Lawn extends Vineyard.Bulb {
         this.io = null
       }
     })
+
     // Authorization
     io.configure(()=>
       io.set('authorization', Lawn.authorization))
@@ -184,7 +194,7 @@ class Lawn extends Vineyard.Bulb {
 
     var user;
     app.post('/vineyard/login', (req, res)=> {
-      this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND pass = ?", [req.body.name, req.body.pass])
+      this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [req.body.name, req.body.pass])
         .then((rows)=> {
           if (rows.length == 0) {
             return res.status(401).send('Invalid login info.')
@@ -198,7 +208,7 @@ class Lawn extends Vineyard.Bulb {
             req.host,
             Math.round(new Date().getTime() / 1000)
           ]
-          this.ground.db.query("REPLACE INTO sessions (id, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
+          this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
             .then(()=> {
               res.send({
                 token: req.sessionID,
@@ -213,30 +223,39 @@ class Lawn extends Vineyard.Bulb {
     });
 
     app.post('/vineyard/upload', (req, res):any => {
-        console.log('files', req.files)
-        console.log('req.body', req.body)
-        var info = JSON.parse(req.body.info)
-        var file = req.files.file;
-        var id = info.id;
-        if (!id.match(/[\w\-]+/)) {
-          return res.status(401).send('Invalid id')
-        }
-        var path = require('path')
-        var ext = path.extname(file.originalFilename)
-        var filename = id + ext
-        var filepath = 'files/' + filename
-        this.fs.rename(file.path, filepath);
+      this.get_user_from_session(req.sessionID)
+        .then((user) => {
 
-        // !!! Add check if file already exists
-        this.ground.update_object('file', {
-          gid: info.id,
-          name: filename,
-          path: path,
-          size: file.size
-        }, user.id)
-          .then((object)=> res.send({file: object}))
-      }
-    )
+          console.log('files', req.files)
+          console.log('req.body', req.body)
+          var info = JSON.parse(req.body.info)
+          var file = req.files.file;
+          var id = info.id;
+          if (!id)
+            return res.status(401).send('id is empty.')
+
+          if (!id.match(/[\w\-]+/))
+            return res.status(401).send('Invalid id.')
+
+          var path = require('path')
+          var ext = path.extname(file.originalFilename)
+          var filename = id + ext
+          var filepath = 'files/' + filename
+          var fs = require('fs')
+          fs.rename(file.path, filepath);
+
+          // !!! Add check if file already exists
+          this.ground.update_object('file', {
+            gid: id,
+            name: filename,
+            path: file.path,
+            size: file.size
+          }, user.id)
+            .then((object)=> res.send({file: object}))
+        },
+        (error)=> res.status(error.status).send(error.message)
+      )
+    })
 
     app.get('/file/:id.:ext', function (req, res):any {
       var id = req.params.id;

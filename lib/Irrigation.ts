@@ -6,41 +6,16 @@
 
 module Lawn {
 
-  export interface Query_Request {
-    trellis:string;
-    filters?:Ground.Query_Filter[]
-    sorts?:Ground.Query_Sort[]
-    expansions?:string[]
-    reductions?:string[]
-  }
-
   export interface Update_Request {
     objects:any[];
   }
 
   export class Irrigation {
-    static query(request:Query_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
-      var i, trellis = ground.sanitize_trellis_argument(request.trellis);
+    static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      var trellis = ground.sanitize_trellis_argument(request.trellis);
       var query = new Ground.Query(trellis);
 
-      if (request.filters) {
-        for (i = 0; i < request.filters.length; ++i) {
-          var filter = request.filters[i]
-          query.add_property_filter(filter.property, filter.value, filter.operator)
-        }
-      }
-
-      if (request.sorts) {
-        for (i = 0; i < request.sorts.length; ++i) {
-          query.add_sort(request.sorts[i])
-        }
-      }
-
-      if (request.expansions) {
-        for (i = 0; i < request.expansions.length; ++i) {
-          query.expansions.push(request.expansions[i])
-        }
-      }
+      query.extend(request)
 
       var fortress = vineyard.bulbs.fortress
       return fortress.query_access(user, query)

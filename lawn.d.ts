@@ -14,6 +14,7 @@ declare class Lawn extends Vineyard.Bulb {
     public fs;
     public config;
     public redis_client;
+    public grow(): void;
     static authorization(handshakeData, callback);
     public debug(...args: any[]): void;
     public get_user_socket(id: number): Socket;

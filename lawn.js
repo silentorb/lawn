@@ -11,6 +11,22 @@ var Lawn = (function (_super) {
         this.instance_sockets = {};
         this.instance_user_sockets = {};
     }
+    Lawn.prototype.grow = function () {
+        var _this = this;
+        if (this.config.log_updates) {
+            this.listen(this.ground, '*.update', function (update, trellis) {
+                if (trellis.name == 'update_log')
+                    return when.resolve();
+
+                return _this.ground.insert_object('update_log', {
+                    user: update.user,
+                    data: JSON.stringify(update.seed),
+                    trellis: trellis.name
+                });
+            });
+        }
+    };
+
     Lawn.authorization = function (handshakeData, callback) {
         return callback(null, true);
     };

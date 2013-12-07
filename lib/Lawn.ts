@@ -16,6 +16,22 @@ class Lawn extends Vineyard.Bulb {
   config
   redis_client
 
+  grow() {
+    if (this.config.log_updates) {
+      this.listen(this.ground, '*.update', (update:Ground.Update, trellis:Ground.Trellis):Promise => {
+        // Don't want an infinite loop
+        if (trellis.name == 'update_log')
+          return when.resolve()
+
+        return this.ground.insert_object('update_log', {
+          user: update.user,
+          data: JSON.stringify(update.seed),
+          trellis: trellis.name
+        })
+      })
+    }
+  }
+
   static authorization(handshakeData, callback) {
 //      console.log('authorizing', handshakeData);
     return callback(null, true);

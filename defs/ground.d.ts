@@ -55,6 +55,7 @@ declare module Ground {
         public get_plural(): string;
         public get_primary_keys(): any[];
         public get_reference_property(other_trellis: Trellis): Ground.Property;
+        public get_root_table(): Ground.Table;
         public get_table_name(): string;
         public get_table_query(): string;
         public get_tree(): Trellis[];
@@ -181,6 +182,7 @@ declare module Ground {
         public get_access_name(): string;
         private generate_sql(trellis);
         private update_embedded_seed(property, value);
+        private update_embedded_seeds(core_properties);
         private create_record(trellis);
         private update_record(trellis, id, key_condition);
         private apply_insert(property, value);

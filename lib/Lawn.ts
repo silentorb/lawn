@@ -246,23 +246,23 @@ class Lawn extends Vineyard.Bulb {
           console.log('req.body', req.body)
           var info = JSON.parse(req.body.info)
           var file = req.files.file;
-          var id = info.id;
-          if (!id)
-            return res.status(401).send('id is empty.')
+          var guid = info.guid;
+          if (!guid)
+            return res.status(401).send('guid is empty.')
 
-          if (!id.match(/[\w\-]+/))
-            return res.status(401).send('Invalid id.')
+          if (!guid.match(/[\w\-]+/))
+            return res.status(401).send('Invalid guid.')
 
           var path = require('path')
           var ext = path.extname(file.originalFilename)
-          var filename = id + ext
+          var filename = guid + ext
           var filepath = 'files/' + filename
           var fs = require('fs')
           fs.rename(file.path, filepath);
 
           // !!! Add check if file already exists
           this.ground.update_object('file', {
-            gid: id,
+            guid: guid,
             name: filename,
             path: file.path,
             size: file.size
@@ -273,21 +273,34 @@ class Lawn extends Vineyard.Bulb {
       )
     })
 
-    app.get('/file/:id.:ext', function (req, res):any {
-      var id = req.params.id;
+    app.get('/file/:guid.:ext', function (req, res):any {
+      var guid = req.params.guid;
       var ext = req.params.ext;
-      if (!id.match(/[\w\-]+/) || !ext.match(/\w+/)) {
-        return res.status(401).send('Invalid file name')
+      if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/)) {
+        return res.status(401).send('Invalid File Name')
       }
       var fs = require('fs')
       var path = require('path')
-      var filepath = path.join(__dirname, '../files', id + '.' + ext)
+      var filepath = path.join(__dirname, '../files', guid + '.' + ext)
       console.log(filepath)
       fs.exists(filepath, function (exists):any {
         if (!exists)
-          return res.status(404).send('Not found')
+          return res.status(404).send('Not Found')
 
-        res.sendfile(filepath)
+        var query = this.ground.create_query('file')
+        query.add_key_filter(req.params.guid)
+        var fortress = this.vineyard.bulbs.fortress
+
+        this.get_user_from_session(req.sessionID)
+          .then((user)=> fortress.query_access(user, query))
+          .then((result)=> {
+            if (result.access)
+              res.sendfile(filepath)
+            else
+              res.status(403).send('Access Denied')
+          },
+          res.status(500).send('Internal Server Error')
+        )
 //          res.end()
       })
     })

@@ -264,7 +264,7 @@ var Lawn = (function (_super) {
             var id = req.params.id;
             var ext = req.params.ext;
             if (!id.match(/[\w\-]+/) || !ext.match(/\w+/)) {
-                return res.status(401).send('Invalid file name');
+                return res.status(401).send('Invalid File Name');
             }
             var fs = require('fs');
             var path = require('path');
@@ -272,9 +272,20 @@ var Lawn = (function (_super) {
             console.log(filepath);
             fs.exists(filepath, function (exists) {
                 if (!exists)
-                    return res.status(404).send('Not found');
+                    return res.status(404).send('Not Found');
 
-                res.sendfile(filepath);
+                var query = this.ground.create_query('file');
+                query.add_key_filter(req.params.id);
+                var fortress = this.vineyard.bulbs.fortress;
+
+                this.get_user_from_session(req.sessionID).then(function (user) {
+                    return fortress.query_access(user, query);
+                }).then(function (result) {
+                    if (result.access)
+                        res.sendfile(filepath);
+else
+                        res.status(403).send('Access Denied');
+                }, res.status(500).send('Internal Server Error'));
             });
         });
         port = port || this.config.ports.http;

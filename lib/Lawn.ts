@@ -15,6 +15,7 @@ class Lawn extends Vineyard.Bulb {
   fs
   config
   redis_client
+  http
 
   grow() {
     if (this.config.log_updates) {
@@ -307,16 +308,27 @@ class Lawn extends Vineyard.Bulb {
     port = port || this.config.ports.http
     console.log('HTTP listening on port ' + port + '.')
 
-    app.listen(port)
+    this.http = app.listen(port)
   }
 
   stop() {
     // Socket IO's documentation is a joke.  I had to look on stack overflow for how to close a socket server.
-    if (this.io && this.io.server)
-      this.io.server.close();
+    if (this.io && this.io.server) {
+      this.io.server.close()
+      this.io = null
+    }
 
-    if (this.redis_client)
+    if (this.redis_client) {
       this.redis_client.quit()
+      this.redis_client = null
+    }
+
+    if (this.http) {
+      console.log('Closing HTTP connection.')
+      this.http.close()
+      this.http = null
+      this.app = null
+    }
   }
 
 }

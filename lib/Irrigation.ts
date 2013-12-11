@@ -12,6 +12,9 @@ module Lawn {
 
   export class Irrigation {
     static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      if (!request)
+        throw new Error('Empty request.')
+
       var trellis = ground.sanitize_trellis_argument(request.trellis);
       var query = new Ground.Query(trellis);
 

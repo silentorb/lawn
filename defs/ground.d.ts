@@ -50,7 +50,7 @@ declare module Ground {
             [name: string]: Ground.Property;
         };
         public get_id(source);
-        public get_parent_join(main_table: string): string;
+        public get_ancestor_join(other: Trellis): string;
         public get_links(): Ground.Property[];
         public get_plural(): string;
         public get_primary_keys(): any[];
@@ -71,7 +71,8 @@ declare module Ground {
         objects: any[];
     }
     interface Query_Filter {
-        property: string;
+        property?: string;
+        path?: string;
         value;
         operator?: string;
     }
@@ -117,6 +118,7 @@ declare module Ground {
         public type: string;
         public properties;
         public source: External_Query_Source;
+        public sorts: Query_Sort[];
         public filters: string[];
         public run_stack;
         public property_filters: Query_Filter[];
@@ -133,7 +135,8 @@ declare module Ground {
         public add_post(clause: string, arguments?): void;
         public add_expansion(clause): void;
         public add_link(property): void;
-        public add_sort(sort: Query_Sort): string;
+        public add_sort(sort: Query_Sort): void;
+        static process_sorts(sorts: Query_Sort[], trellis: Ground.Trellis): string;
         public add_wrapper(wrapper: Query_Wrapper): void;
         public generate_pager(offset?: number, limit?: number): string;
         public generate_sql(properties): string;
@@ -145,7 +148,7 @@ declare module Ground {
         public create_sub_query(trellis: Ground.Trellis, property: Ground.Property): Query;
         public get_many_list(seed, property: Ground.Property, relationship: Ground.Relationships): Promise;
         public get_path(...args: string[]): string;
-        public get_reference_object(row, property: Ground.Property): Promise;
+        public get_reference_object(row, property: Ground.Property);
         public has_expansion(path: string): boolean;
         public process_row(row): Promise;
         public query_link_property(seed, property): Promise;

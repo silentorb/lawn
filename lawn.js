@@ -233,22 +233,22 @@ var Lawn = (function (_super) {
                 console.log('req.body', req.body);
                 var info = JSON.parse(req.body.info);
                 var file = req.files.file;
-                var id = info.id;
-                if (!id)
-                    return res.status(401).send('id is empty.');
+                var guid = info.guid;
+                if (!guid)
+                    return res.status(401).send('guid is empty.');
 
-                if (!id.match(/[\w\-]+/))
-                    return res.status(401).send('Invalid id.');
+                if (!guid.match(/[\w\-]+/))
+                    return res.status(401).send('Invalid guid.');
 
                 var path = require('path');
                 var ext = path.extname(file.originalFilename);
-                var filename = id + ext;
+                var filename = guid + ext;
                 var filepath = 'files/' + filename;
                 var fs = require('fs');
                 fs.rename(file.path, filepath);
 
                 _this.ground.update_object('file', {
-                    gid: id,
+                    guid: guid,
                     name: filename,
                     path: file.path,
                     size: file.size
@@ -260,22 +260,22 @@ var Lawn = (function (_super) {
             });
         });
 
-        app.get('/file/:id.:ext', function (req, res) {
-            var id = req.params.id;
+        app.get('/file/:guid.:ext', function (req, res) {
+            var guid = req.params.guid;
             var ext = req.params.ext;
-            if (!id.match(/[\w\-]+/) || !ext.match(/\w+/)) {
+            if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/)) {
                 return res.status(401).send('Invalid File Name');
             }
             var fs = require('fs');
             var path = require('path');
-            var filepath = path.join(__dirname, '../files', id + '.' + ext);
+            var filepath = path.join(__dirname, '../files', guid + '.' + ext);
             console.log(filepath);
             fs.exists(filepath, function (exists) {
                 if (!exists)
                     return res.status(404).send('Not Found');
 
                 var query = this.ground.create_query('file');
-                query.add_key_filter(req.params.id);
+                query.add_key_filter(req.params.guid);
                 var fortress = this.vineyard.bulbs.fortress;
 
                 this.get_user_from_session(req.sessionID).then(function (user) {
@@ -291,15 +291,26 @@ else
         port = port || this.config.ports.http;
         console.log('HTTP listening on port ' + port + '.');
 
-        app.listen(port);
+        this.http = app.listen(port);
     };
 
     Lawn.prototype.stop = function () {
-        if (this.io && this.io.server)
+        if (this.io && this.io.server) {
             this.io.server.close();
+            this.io = null;
+        }
 
-        if (this.redis_client)
+        if (this.redis_client) {
             this.redis_client.quit();
+            this.redis_client = null;
+        }
+
+        if (this.http) {
+            console.log('Closing HTTP connection.');
+            this.http.close();
+            this.http = null;
+            this.app = null;
+        }
     };
     return Lawn;
 })(Vineyard.Bulb);
@@ -309,6 +320,9 @@ var Lawn;
         function Irrigation() {
         }
         Irrigation.query = function (request, user, ground, vineyard) {
+            if (!request)
+                throw new Error('Empty request.');
+
             var trellis = ground.sanitize_trellis_argument(request.trellis);
             var query = new Ground.Query(trellis);
 

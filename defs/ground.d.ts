@@ -85,6 +85,7 @@ declare module Ground {
         end: string;
     }
     interface Property_Query_Source {
+        name: string;
         filters?: Query_Filter[];
         sorts?: Query_Sort[];
         expansions?: string[];

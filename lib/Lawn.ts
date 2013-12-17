@@ -5,6 +5,13 @@ declare var Irrigation
 
 module Lawn {
 
+  export interface Config {
+    ports
+    log_updates?:boolean
+    use_redis?:boolean
+    cookie_secret?:string
+    log_file?:string
+  }
 }
 
 class Lawn extends Vineyard.Bulb {
@@ -13,7 +20,7 @@ class Lawn extends Vineyard.Bulb {
   instance_user_sockets = {}
   private app:ExpressApplication
   fs
-  config
+  config:Lawn.Config
   redis_client
   http
 
@@ -207,7 +214,14 @@ class Lawn extends Vineyard.Bulb {
     if (!this.config.cookie_secret)
       throw new Error('lawn.cookie_secret must be set!')
 
-    app.use(express.session({secret: this.config.cookie_secret}));
+    app.use(express.session({secret: this.config.cookie_secret}))
+
+    // Log request info to a file
+    if (typeof this.config.log_file === 'string') {
+      var fs = require('fs')
+      var log_file = fs.createWriteStream(this.config.log_file, {flags: 'a'})
+      app.use(express.logger({stream: log_file}))
+    }
 
     var user;
     app.post('/vineyard/login', (req, res)=> {

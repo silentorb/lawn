@@ -5,6 +5,13 @@
 /// <reference path="vineyard.d.ts" />
 
 declare module Lawn {
+    interface Config {
+        ports;
+        log_updates?: boolean;
+        use_redis?: boolean;
+        cookie_secret?: string;
+        log_file?: string;
+    }
 }
 declare class Lawn extends Vineyard.Bulb {
     public io;
@@ -12,7 +19,7 @@ declare class Lawn extends Vineyard.Bulb {
     public instance_user_sockets: {};
     private app;
     public fs;
-    public config;
+    public config: Lawn.Config;
     public redis_client;
     public http;
     public grow(): void;

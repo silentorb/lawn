@@ -29,6 +29,7 @@ declare class Lawn extends Vineyard.Bulb {
     public initialize_session(socket, user): void;
     public start(): void;
     public get_user_from_session(token: string): Promise;
+    public http_login(req, res, body): void;
     public login(data, socket: ISocket, callback): {};
     public on_connection(socket: ISocket): Socket;
     public start_sockets(port?): void;

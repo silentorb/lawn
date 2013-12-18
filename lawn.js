@@ -108,6 +108,34 @@ var Lawn = (function (_super) {
         });
     };
 
+    Lawn.prototype.http_login = function (req, res, body) {
+        var _this = this;
+        this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
+            if (rows.length == 0) {
+                return res.status(401).send('Invalid login info.');
+            }
+
+            var user = rows[0];
+
+            var session = [
+                user.id,
+                req.sessionID,
+                req.host,
+                Math.round(new Date().getTime() / 1000)
+            ];
+            _this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session).then(function () {
+                res.send({
+                    token: req.sessionID,
+                    message: 'Login successful',
+                    user: {
+                        id: user.id,
+                        name: user.name
+                    }
+                });
+            });
+        });
+    };
+
     Lawn.prototype.login = function (data, socket, callback) {
         var _this = this;
         console.log('message2', data);
@@ -207,29 +235,25 @@ var Lawn = (function (_super) {
 
         var user;
         app.post('/vineyard/login', function (req, res) {
-            _this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [req.body.name, req.body.pass]).then(function (rows) {
-                if (rows.length == 0) {
-                    return res.status(401).send('Invalid login info.');
-                }
+            return _this.http_login(req, res, req.body);
+        });
+        app.get('/vineyard/login', function (req, res) {
+            return _this.http_login(req, res, req.query);
+        });
 
-                user = rows[0];
+        app.post('/vineyard/query', function (req, res) {
+            _this.get_user_from_session(req.sessionID).then(function (user) {
+                console.log('files', req.files);
+                console.log('req.body', req.body);
+                var request = JSON.parse(req.body);
 
-                var session = [
-                    user.id,
-                    req.sessionID,
-                    req.host,
-                    Math.round(new Date().getTime() / 1000)
-                ];
-                _this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session).then(function () {
-                    res.send({
-                        token: req.sessionID,
-                        message: 'Login successful',
-                        user: {
-                            id: user.id,
-                            name: user.name
-                        }
-                    });
+                Irrigation.query(request, user, _this.ground, _this.vineyard).then(function (objects) {
+                    return res.send({ message: 'Success', objects: objects });
+                }, function (error) {
+                    res.status(error.status).send(error.message);
                 });
+            }, function (error) {
+                return res.status(error.status).send(error.message);
             });
         });
 

@@ -129,6 +129,35 @@ class Lawn extends Vineyard.Bulb {
       })
   }
 
+  http_login(req, res, body) {
+    this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass])
+      .then((rows)=> {
+        if (rows.length == 0) {
+          return res.status(401).send('Invalid login info.')
+        }
+
+        var user = rows[0];
+
+        var session = [
+          user.id,
+          req.sessionID,
+          req.host,
+          Math.round(new Date().getTime() / 1000)
+        ]
+        this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
+          .then(()=> {
+            res.send({
+              token: req.sessionID,
+              message: 'Login successful',
+              user: {
+                id: user.id,
+                name: user.name
+              }
+            });
+          })
+      })
+  }
+
   login(data, socket:ISocket, callback) {
     console.log('message2', data);
     if (!data.token)
@@ -224,34 +253,56 @@ class Lawn extends Vineyard.Bulb {
     }
 
     var user;
-    app.post('/vineyard/login', (req, res)=> {
-      this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [req.body.name, req.body.pass])
-        .then((rows)=> {
-          if (rows.length == 0) {
-            return res.status(401).send('Invalid login info.')
-          }
+    app.post('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
+    app.get('/vineyard/login', (req, res)=> this.http_login(req, res, req.query))
 
-          user = rows[0];
+    app.post('/vineyard/query', (req, res):any => {
+      this.get_user_from_session(req.sessionID)
+        .then((user) => {
 
-          var session = [
-            user.id,
-            req.sessionID,
-            req.host,
-            Math.round(new Date().getTime() / 1000)
-          ]
-          this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
-            .then(()=> {
-              res.send({
-                token: req.sessionID,
-                message: 'Login successful',
-                user: {
-                  id: user.id,
-                  name: user.name
-                }
-              });
+          console.log('files', req.files)
+          console.log('req.body', req.body)
+          var request = JSON.parse(req.body)
+
+          Irrigation.query(request, user, this.ground, this.vineyard)
+            .then((objects)=> res.send({ message: 'Success', objects: objects }),
+            (error)=> {
+              res.status(error.status).send(error.message)
+
+//              callback({ code: 403, 'message': 'You are not authorized to perform this query.', objects: [] })
+//              socket.emit('error', {
+//                'code': 401,
+//                'message': 'Unauthorized',
+//                request: request
+//              })
             })
-        })
-    });
+        },
+        (error)=> res.status(error.status).send(error.message)
+      )
+    })
+
+//    app.post('/vineyard/update', (req, res):any => {
+//      this.get_user_from_session(req.sessionID)
+//        .then((user) => {
+//
+//          console.log('files', req.files)
+//          console.log('req.body', req.body)
+//          var request = JSON.parse(req.body)
+//
+//          Irrigation.update(request, user, this.ground, this.vineyard)
+//            .then((objects)=> callback({ code: 200, 'message': 'Success', objects: objects}),
+//            (error)=> {
+//              callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [] })
+//              socket.emit('error', {
+//                'code': 401,
+//                'message': 'Unauthorized',
+//                request: request
+//              })
+//            })
+//        },
+//        (error)=> res.status(error.status).send(error.message)
+//      )
+//    })
 
     app.post('/vineyard/upload', (req, res):any => {
       this.get_user_from_session(req.sessionID)

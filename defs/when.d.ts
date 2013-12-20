@@ -5,11 +5,13 @@ interface Deferred {
 }
 
 interface Promise {
-  then(...args:any[]):Promise;
+  then(success, error?):Promise;
   map(...args:any[]):Promise;
+  done(success, error);
+  otherwise(error);
 }
-declare module "when" {
 
+declare module "when" {
   function defer(): Deferred;
   function map(list, action);
   function all(list);

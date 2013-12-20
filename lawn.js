@@ -233,7 +233,6 @@ var Lawn = (function (_super) {
             app.use(express.logger({ stream: log_file }));
         }
 
-        var user;
         app.post('/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.body);
         });
@@ -245,15 +244,13 @@ var Lawn = (function (_super) {
             _this.get_user_from_session(req.sessionID).then(function (user) {
                 console.log('files', req.files);
                 console.log('req.body', req.body);
-                var request = JSON.parse(req.body);
+                var request = req.body;
 
-                Irrigation.query(request, user, _this.ground, _this.vineyard).then(function (objects) {
+                return Irrigation.query(request, user, _this.ground, _this.vineyard).then(function (objects) {
                     return res.send({ message: 'Success', objects: objects });
-                }, function (error) {
-                    res.status(error.status).send(error.message);
                 });
-            }, function (error) {
-                return res.status(error.status).send(error.message);
+            }).otherwise(function (error) {
+                res.json(error.status || 500, { message: error.message });
             });
         });
 

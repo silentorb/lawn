@@ -41,7 +41,6 @@ class Lawn extends Vineyard.Bulb {
   }
 
   static authorization(handshakeData, callback) {
-//      console.log('authorizing', handshakeData);
     return callback(null, true);
   }
 
@@ -101,6 +100,7 @@ class Lawn extends Vineyard.Bulb {
     var query = this.ground.create_query('session')
     query.add_key_filter(token)
     return query.run_single()
+//      .then(()=> { throw new Error('Debug error') })
       .then((session) => {
         console.log('session', session)
         if (!session)
@@ -116,16 +116,6 @@ class Lawn extends Vineyard.Bulb {
           id: session.user.id,
           name: session.user.name
         }
-
-//        var query = this.ground.create_query('user')
-//        query.add_key_filter(session.user)
-//        return query.run_single()
-//          .then((user_record) => {
-//            if (!user_record)
-//              return when.reject({status: 401, message: 'User not found.' })
-//
-//            return user_record
-//          });
       })
   }
 
@@ -252,7 +242,6 @@ class Lawn extends Vineyard.Bulb {
       app.use(express.logger({stream: log_file}))
     }
 
-    var user;
     app.post('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
     app.get('/vineyard/login', (req, res)=> this.http_login(req, res, req.query))
 
@@ -262,23 +251,15 @@ class Lawn extends Vineyard.Bulb {
 
           console.log('files', req.files)
           console.log('req.body', req.body)
-          var request = JSON.parse(req.body)
+          var request = req.body
 
-          Irrigation.query(request, user, this.ground, this.vineyard)
-            .then((objects)=> res.send({ message: 'Success', objects: objects }),
-            (error)=> {
-              res.status(error.status).send(error.message)
-
-//              callback({ code: 403, 'message': 'You are not authorized to perform this query.', objects: [] })
-//              socket.emit('error', {
-//                'code': 401,
-//                'message': 'Unauthorized',
-//                request: request
-//              })
-            })
-        },
-        (error)=> res.status(error.status).send(error.message)
-      )
+          return Irrigation.query(request, user, this.ground, this.vineyard)
+            .then((objects)=> res.send({ message: 'Success', objects: objects })
+          )
+        })
+        .otherwise((error)=> {
+          res.json(error.status || 500, { message: error.message })
+        })
     })
 
 //    app.post('/vineyard/update', (req, res):any => {

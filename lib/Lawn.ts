@@ -120,10 +120,12 @@ class Lawn extends Vineyard.Bulb {
   }
 
   http_login(req, res, body) {
+    var mysql = require('mysql')
     this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass])
+//    this.ground.db.query("SELECT id, name FROM users WHERE name = '"+ body.name + "' AND password = '" + body.pass + "'")
       .then((rows)=> {
         if (rows.length == 0) {
-          return res.status(401).send('Invalid login info.')
+          return res.status(401).send('Invalid login info2.')
         }
 
         var user = rows[0];
@@ -320,7 +322,7 @@ class Lawn extends Vineyard.Bulb {
       )
     })
 
-    app.get('/file/:guid.:ext', function (req, res):any {
+    app.get('/file/:guid.:ext', (req, res)=> {
       var guid = req.params.guid;
       var ext = req.params.ext;
       if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/)) {
@@ -328,11 +330,11 @@ class Lawn extends Vineyard.Bulb {
       }
       var fs = require('fs')
       var path = require('path')
-      var filepath = path.join(__dirname, '../files', guid + '.' + ext)
+      var filepath = path.join(this.vineyard.root_path, 'files', guid + '.' + ext)
       console.log(filepath)
-      fs.exists(filepath, function (exists):any {
+      fs.exists(filepath, (exists)=> {
         if (!exists)
-          return res.status(404).send('Not Found')
+          return res.status(404).send('File Not Found')
 
         var query = this.ground.create_query('file')
         query.add_key_filter(req.params.guid)
@@ -346,7 +348,7 @@ class Lawn extends Vineyard.Bulb {
             else
               res.status(403).send('Access Denied')
           },
-          res.status(500).send('Internal Server Error')
+          ()=> res.status(500).send('Internal Server Error')
         )
 //          res.end()
       })

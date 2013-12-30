@@ -110,9 +110,10 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.http_login = function (req, res, body) {
         var _this = this;
+        var mysql = require('mysql');
         this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
             if (rows.length == 0) {
-                return res.status(401).send('Invalid login info.');
+                return res.status(401).send('Invalid login info2.');
             }
 
             var user = rows[0];
@@ -295,24 +296,26 @@ var Lawn = (function (_super) {
             }
             var fs = require('fs');
             var path = require('path');
-            var filepath = path.join(__dirname, '../files', guid + '.' + ext);
+            var filepath = path.join(_this.vineyard.root_path, 'files', guid + '.' + ext);
             console.log(filepath);
             fs.exists(filepath, function (exists) {
                 if (!exists)
-                    return res.status(404).send('Not Found');
+                    return res.status(404).send('File Not Found');
 
-                var query = this.ground.create_query('file');
+                var query = _this.ground.create_query('file');
                 query.add_key_filter(req.params.guid);
-                var fortress = this.vineyard.bulbs.fortress;
+                var fortress = _this.vineyard.bulbs.fortress;
 
-                this.get_user_from_session(req.sessionID).then(function (user) {
+                _this.get_user_from_session(req.sessionID).then(function (user) {
                     return fortress.query_access(user, query);
                 }).then(function (result) {
                     if (result.access)
                         res.sendfile(filepath);
 else
                         res.status(403).send('Access Denied');
-                }, res.status(500).send('Internal Server Error'));
+                }, function () {
+                    return res.status(500).send('Internal Server Error');
+                });
             });
         });
         port = port || this.config.ports.http;

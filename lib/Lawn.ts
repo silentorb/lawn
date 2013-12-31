@@ -166,7 +166,7 @@ class Lawn extends Vineyard.Bulb {
         callback(user)
       },
       (error)=> socket.emit('error', {
-        'message': 'Invalid session.'
+        'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
       })
     )
   }

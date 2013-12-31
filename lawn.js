@@ -152,7 +152,7 @@ var Lawn = (function (_super) {
             callback(user);
         }, function (error) {
             return socket.emit('error', {
-                'message': 'Invalid session.'
+                'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
             });
         });
     };

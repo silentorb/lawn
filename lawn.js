@@ -151,7 +151,10 @@ var Lawn = (function (_super) {
         return this.get_user_from_session(data.token).then(function (user) {
             _this.initialize_session(socket, user);
             console.log('user', user);
-            callback(user);
+            if (callback) {
+                console.log('login callback called');
+                callback(user);
+            }
         }, function (error) {
             return socket.emit('error', {
                 'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message

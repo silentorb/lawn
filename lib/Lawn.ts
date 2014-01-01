@@ -162,10 +162,12 @@ class Lawn extends Vineyard.Bulb {
 
     return this.get_user_from_session(data.token)
       .then((user)=> {
-//            user.session = session;
         this.initialize_session(socket, user);
         console.log('user', user)
-        callback(user)
+        if (callback) {
+          console.log('login callback called')
+          callback(user)
+        }
       },
       (error)=> socket.emit('error', {
         'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message

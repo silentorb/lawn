@@ -79,6 +79,8 @@ var Lawn = (function (_super) {
             });
         });
 
+        this.invoke('socket.add', socket, user);
+
         console.log(process.pid, 'Logged in: ' + user.id);
     };
 
@@ -113,7 +115,7 @@ var Lawn = (function (_super) {
         var mysql = require('mysql');
         this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
             if (rows.length == 0) {
-                return res.status(401).send('Invalid login info2.');
+                return res.status(401).send('Invalid login info.');
             }
 
             var user = rows[0];

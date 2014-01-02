@@ -59,7 +59,7 @@ class Lawn extends Vineyard.Bulb {
     var _this = this;
     this.instance_sockets[socket.id] = socket
     this.instance_user_sockets[user.id] = socket
-    socket.join('test room')
+    socket.join(user.id)
 
     socket.on('query', (request, callback)=> {
       Irrigation.query(request, user, this.ground, this.vineyard)

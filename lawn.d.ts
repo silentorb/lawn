@@ -4,9 +4,10 @@
 /// <reference path="ground.d.ts" />
 /// <reference path="vineyard.d.ts" />
 
+declare var Irrigation: any;
 declare module Lawn {
     interface Config {
-        ports;
+        ports: any;
         log_updates?: boolean;
         use_redis?: boolean;
         cookie_secret?: string;
@@ -14,26 +15,26 @@ declare module Lawn {
     }
 }
 declare class Lawn extends Vineyard.Bulb {
-    public io;
+    public io: any;
     public instance_sockets: {};
     public instance_user_sockets: {};
     private app;
-    public fs;
+    public fs: any;
     public config: Lawn.Config;
-    public redis_client;
-    public http;
+    public redis_client: any;
+    public http: any;
     public grow(): void;
-    static authorization(handshakeData, callback);
+    static authorization(handshakeData: any, callback: any): any;
     public debug(...args: any[]): void;
     public get_user_socket(id: number): Socket;
-    public initialize_session(socket, user): void;
+    public initialize_session(socket: any, user: any): void;
     public start(): void;
     public get_user_from_session(token: string): Promise;
-    public http_login(req, res, body): void;
-    public login(data, socket: ISocket, callback): {};
+    public http_login(req: any, res: any, body: any): void;
+    public login(data: any, socket: ISocket, callback: any): {};
     public on_connection(socket: ISocket): Socket;
-    public start_sockets(port?): void;
-    public start_http(port): void;
+    public start_sockets(port?: any): void;
+    public start_http(port: any): void;
     public stop(): void;
 }
 declare module Lawn {
@@ -41,6 +42,7 @@ declare module Lawn {
         objects: any[];
     }
     class Irrigation {
+        static process(method: string, request: Ground.External_Query_Source, user: Vineyard.IUser, vineyard: Vineyard, socket: any, callback: any): Promise;
         static query(request: Ground.External_Query_Source, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
         static update(request: Update_Request, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
     }

@@ -1,6 +1,7 @@
 ///<reference path="../defs/socket.io.extension.d.ts"/>
 ///<reference path="../defs/express.d.ts"/>
 /// <reference path="references.ts"/>
+
 declare var Irrigation
 
 module Lawn {
@@ -18,7 +19,7 @@ class Lawn extends Vineyard.Bulb {
   io // Socket IO
   instance_sockets = {}
   instance_user_sockets = {}
-  private app:ExpressApplication
+  private app
   fs
   config:Lawn.Config
   redis_client
@@ -26,15 +27,15 @@ class Lawn extends Vineyard.Bulb {
 
   grow() {
     if (this.config.log_updates) {
-      this.listen(this.ground, '*.update', (update:Ground.Update, trellis:Ground.Trellis):Promise => {
+      this.listen(this.ground, '*.update', (seed, update:Ground.Update):Promise => {
         // Don't want an infinite loop
-        if (trellis.name == 'update_log')
+        if (update.trellis.name == 'update_log')
           return when.resolve()
 
         return this.ground.insert_object('update_log', {
           user: update.user,
-          data: JSON.stringify(update.seed),
-          trellis: trellis.name
+          data: JSON.stringify(seed),
+          trellis: update.trellis.name
         })
       })
     }
@@ -56,36 +57,59 @@ class Lawn extends Vineyard.Bulb {
   }
 
   initialize_session(socket, user) {
-    var _this = this;
     this.instance_sockets[socket.id] = socket
     this.instance_user_sockets[user.id] = socket
     socket.join(user.id)
 
     socket.on('query', (request, callback)=> {
-      Irrigation.query(request, user, this.ground, this.vineyard)
-        .then((objects)=> callback({ code: 200, 'message': 'Success', objects: objects }),
-        (error)=> {
-          callback({ code: 403, 'message': 'You are not authorized to perform this query.', objects: [] })
-          socket.emit('error', {
-            'code': 401,
-            'message': 'Unauthorized',
-            request: request
-          })
-        })
+      Irrigation.process('query', request, user, this.vineyard, socket, callback)
+//      Irrigation.query(request, user, this.ground, this.vineyard)
+//        .done((objects)=> {
+//          if (callback)
+//            callback({ code: 200, 'message': 'Success', objects: objects })
+//          else
+//            socket.emit('error', {
+//              'code': 400,
+//              'message': 'Request must ask for an acknowledgement',
+//              request: request
+//            })
+//        },
+//        (error)=> {
+//          callback({ code: 403, 'message': 'You are not authorized to perform this query.', objects: [] })
+//          socket.emit('error', {
+//            'code': 403,
+//            'message': 'Unauthorized',
+//            request: request
+//          })
+//        })
     })
 
     socket.on('update', (request, callback)=> {
-      console.log('vineyard update:', request)
-      Irrigation.update(request, user, this.ground, this.vineyard)
-        .then((objects)=> callback({ code: 200, 'message': 'Success', objects: objects}),
-        (error)=> {
-          callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [] })
-          socket.emit('error', {
-            'code': 401,
-            'message': 'Unauthorized',
-            request: request
-          })
-        })
+      Irrigation.process('update', request, user, this.vineyard, socket, callback)
+//      Irrigation.update(request, user, this.ground, this.vineyard)
+//        .then((objects)=> {
+//          if (callback)
+//            callback({ code: 200, 'message': 'Success', objects: objects })
+//          else
+//            socket.emit('error', {
+//              'code': 400,
+//              'message': 'Request must ask for an acknowledgement',
+//              request: request
+//            })
+//        },
+//        (error)=> {
+////          if (callback)
+////            callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [],
+////              unauthorized_object: error.resource})
+////          else
+//          socket.emit('error', {
+//            'code': 403,
+//            'message': 'Unauthorized',
+//            request: request,
+//            unauthorized_object: error.resource
+//          })
+//        }
+//      )
     })
 
     this.invoke('socket.add', socket, user)
@@ -122,6 +146,7 @@ class Lawn extends Vineyard.Bulb {
   }
 
   http_login(req, res, body) {
+    console.log('login', body)
     var mysql = require('mysql')
     this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass])
 //    this.ground.db.query("SELECT id, name FROM users WHERE name = '"+ body.name + "' AND password = '" + body.pass + "'")
@@ -138,6 +163,7 @@ class Lawn extends Vineyard.Bulb {
           req.host,
           Math.round(new Date().getTime() / 1000)
         ]
+        console.log('insert-login', body)
         this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
           .then(()=> {
             res.send({
@@ -383,4 +409,118 @@ class Lawn extends Vineyard.Bulb {
     }
   }
 
+}
+
+module Lawn {
+
+  export interface Update_Request {
+    objects:any[];
+  }
+
+  class HttpError {
+    name = "HttpError"
+    message
+    stack
+    status
+    details
+
+    constructor(message:string, status = 500) {
+      this.message = message
+      this.status = status
+    }
+  }
+
+  class Authorization_Error extends HttpError {
+    details
+
+    constructor(message:string, details) {
+      super(message, 403)
+      this.details = details
+    }
+  }
+
+  export class Irrigation {
+
+    static process(method:string, request:Ground.External_Query_Source, user:Vineyard.IUser, vineyard:Vineyard, socket, callback):Promise {
+      var fortress = vineyard.bulbs.fortress
+      var action = Irrigation[method]
+      return fortress.get_roles(user)
+        .then(()=> action(request, user, vineyard.ground, vineyard))
+        .then((objects)=> {
+          if (callback)
+            callback({ code: 200, 'message': 'Success', objects: objects })
+          else
+            socket.emit('error', {
+              status: 400,
+              message: 'Requests need to ask for an acknowledgement',
+              request: request
+            })
+        },
+        (error)=> {
+//          if (callback)
+//            callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [],
+//              unauthorized_object: error.resource})
+//          else
+          error = error || {}
+          console.log('service error:', error.message, error.status, error.stack)
+          var status = error.status || 500
+
+          var response = {
+            code: status,
+            status: status,
+            request: request,
+            details: error.details,
+            message: error.message || "Server Error"
+          }
+
+          if (fortress.user_has_role(user, 'admin')) {
+            response.message = status == 500 ? 'Server Error' : error.message || "Server Error"
+            response['stack'] = error.stack
+          }
+
+          socket.emit('error', response)
+        })
+    }
+
+    static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      if (!request)
+        throw new HttpError('Empty request', 400)
+
+      var trellis = ground.sanitize_trellis_argument(request.trellis);
+      var query = new Ground.Query(trellis);
+
+      query.extend(request)
+
+      var fortress = vineyard.bulbs.fortress
+      return fortress.query_access(user, query)
+        .then((result)=> {
+          if (result.access)
+            return query.run();
+          else
+            throw new Authorization_Error('You are not authorized to perform this query', result)
+        })
+    }
+
+    static update(request:Update_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      var updates = request.objects.map((object)=>
+          ground.create_update(object.trellis, object, user)
+      )
+
+      if (!request.objects)
+        throw new HttpError('Request requires an objects array', 400);
+
+      var fortress = vineyard.bulbs.fortress
+      return fortress.update_access(user, updates)
+        .then((result)=> {
+          if (result.access) {
+            var update_promises = updates.map((update) => update.run())
+            return when.all(update_promises)
+          }
+          else
+            throw new Authorization_Error('You are not authorized to perform this update', result)
+        })
+
+
+    }
+  }
 }

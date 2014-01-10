@@ -4,6 +4,7 @@ var MetaHub = require('metahub');var Ground = require('ground');var Vineyard = r
     __.prototype = b.prototype;
     d.prototype = new __();
 };
+
 var Lawn = (function (_super) {
     __extends(Lawn, _super);
     function Lawn() {
@@ -14,14 +15,14 @@ var Lawn = (function (_super) {
     Lawn.prototype.grow = function () {
         var _this = this;
         if (this.config.log_updates) {
-            this.listen(this.ground, '*.update', function (update, trellis) {
-                if (trellis.name == 'update_log')
+            this.listen(this.ground, '*.update', function (seed, update) {
+                if (update.trellis.name == 'update_log')
                     return when.resolve();
 
                 return _this.ground.insert_object('update_log', {
                     user: update.user,
-                    data: JSON.stringify(update.seed),
-                    trellis: trellis.name
+                    data: JSON.stringify(seed),
+                    trellis: update.trellis.name
                 });
             });
         }
@@ -47,36 +48,16 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.initialize_session = function (socket, user) {
         var _this = this;
-        var _this = this;
         this.instance_sockets[socket.id] = socket;
         this.instance_user_sockets[user.id] = socket;
         socket.join(user.id);
 
         socket.on('query', function (request, callback) {
-            Irrigation.query(request, user, _this.ground, _this.vineyard).then(function (objects) {
-                return callback({ code: 200, 'message': 'Success', objects: objects });
-            }, function (error) {
-                callback({ code: 403, 'message': 'You are not authorized to perform this query.', objects: [] });
-                socket.emit('error', {
-                    'code': 401,
-                    'message': 'Unauthorized',
-                    request: request
-                });
-            });
+            Irrigation.process('query', request, user, _this.vineyard, socket, callback);
         });
 
         socket.on('update', function (request, callback) {
-            console.log('vineyard update:', request);
-            Irrigation.update(request, user, _this.ground, _this.vineyard).then(function (objects) {
-                return callback({ code: 200, 'message': 'Success', objects: objects });
-            }, function (error) {
-                callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [] });
-                socket.emit('error', {
-                    'code': 401,
-                    'message': 'Unauthorized',
-                    request: request
-                });
-            });
+            Irrigation.process('update', request, user, _this.vineyard, socket, callback);
         });
 
         this.invoke('socket.add', socket, user);
@@ -112,6 +93,7 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.http_login = function (req, res, body) {
         var _this = this;
+        console.log('login', body);
         var mysql = require('mysql');
         this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
             if (rows.length == 0) {
@@ -126,6 +108,7 @@ var Lawn = (function (_super) {
                 req.host,
                 Math.round(new Date().getTime() / 1000)
             ];
+            console.log('insert-login', body);
             _this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session).then(function () {
                 res.send({
                     token: req.sessionID,
@@ -211,9 +194,7 @@ var Lawn = (function (_super) {
             var RedisStore = require('socket.io/lib/stores/redis'), redis = require("socket.io/node_modules/redis"), pub = redis.createClient(), sub = redis.createClient(), client = redis.createClient();
 
             io.set('store', new RedisStore({
-                redisPub: pub,
-                redisSub: sub,
-                redisClient: client
+                redisPub: pub, redisSub: sub, redisClient: client
             }));
         }
     };
@@ -316,7 +297,7 @@ var Lawn = (function (_super) {
                 }).then(function (result) {
                     if (result.access)
                         res.sendfile(filepath);
-else
+                    else
                         res.status(403).send('Access Denied');
                 }, function () {
                     return res.status(500).send('Internal Server Error');
@@ -349,14 +330,70 @@ else
     };
     return Lawn;
 })(Vineyard.Bulb);
+
 var Lawn;
 (function (Lawn) {
+    var HttpError = (function () {
+        function HttpError(message, status) {
+            if (typeof status === "undefined") { status = 500; }
+            this.name = "HttpError";
+            this.message = message;
+            this.status = status;
+        }
+        return HttpError;
+    })();
+
+    var Authorization_Error = (function (_super) {
+        __extends(Authorization_Error, _super);
+        function Authorization_Error(message, details) {
+            _super.call(this, message, 403);
+            this.details = details;
+        }
+        return Authorization_Error;
+    })(HttpError);
+
     var Irrigation = (function () {
         function Irrigation() {
         }
+        Irrigation.process = function (method, request, user, vineyard, socket, callback) {
+            var fortress = vineyard.bulbs.fortress;
+            var action = Irrigation[method];
+            return fortress.get_roles(user).then(function () {
+                return action(request, user, vineyard.ground, vineyard);
+            }).then(function (objects) {
+                if (callback)
+                    callback({ code: 200, 'message': 'Success', objects: objects });
+                else
+                    socket.emit('error', {
+                        status: 400,
+                        message: 'Requests need to ask for an acknowledgement',
+                        request: request
+                    });
+            }, function (error) {
+                error = error || {};
+                console.log('service error:', error.message, error.status, error.stack);
+                var status = error.status || 500;
+
+                var response = {
+                    code: status,
+                    status: status,
+                    request: request,
+                    details: error.details,
+                    message: error.message || "Server Error"
+                };
+
+                if (fortress.user_has_role(user, 'admin')) {
+                    response.message = status == 500 ? 'Server Error' : error.message || "Server Error";
+                    response['stack'] = error.stack;
+                }
+
+                socket.emit('error', response);
+            });
+        };
+
         Irrigation.query = function (request, user, ground, vineyard) {
             if (!request)
-                throw new Error('Empty request.');
+                throw new HttpError('Empty request', 400);
 
             var trellis = ground.sanitize_trellis_argument(request.trellis);
             var query = new Ground.Query(trellis);
@@ -364,11 +401,11 @@ var Lawn;
             query.extend(request);
 
             var fortress = vineyard.bulbs.fortress;
-            return fortress.query_access(user, query).then(function (access) {
-                if (access)
+            return fortress.query_access(user, query).then(function (result) {
+                if (result.access)
                     return query.run();
-else
-                    throw new Error('Unauthorized');
+                else
+                    throw new Authorization_Error('You are not authorized to perform this query', result);
             });
         };
 
@@ -378,17 +415,17 @@ else
             });
 
             if (!request.objects)
-                throw new Error('Request requires an objects array.');
+                throw new HttpError('Request requires an objects array', 400);
 
             var fortress = vineyard.bulbs.fortress;
-            return fortress.update_access(user, updates).then(function (access) {
-                if (access) {
+            return fortress.update_access(user, updates).then(function (result) {
+                if (result.access) {
                     var update_promises = updates.map(function (update) {
                         return update.run();
                     });
                     return when.all(update_promises);
                 } else
-                    throw new Error('Unauthorized');
+                    throw new Authorization_Error('You are not authorized to perform this update', result);
             });
         };
         return Irrigation;

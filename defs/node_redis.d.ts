@@ -119,7 +119,7 @@ declare module 'redis' {
         expireat: Command;
         keys: Command;
         dbsize: Command;
-        auth: Command;
+        auth;
         ping: Command;
         echo: Command;
         save: Command;
@@ -256,7 +256,7 @@ declare module 'redis' {
         EXPIREAT: Command;
         KEYS: Command;
         DBSIZE: Command;
-        AUTH: Command;
+        AUTH;
         PING: Command;
         ECHO: Command;
         SAVE: Command;
@@ -333,8 +333,8 @@ declare module 'redis' {
         retry_delay : number;
         retry_backoff: number;
 
-        auth(password: string, callback: Function): void;
-        AUTH(password: string, callback: Function): void;
+        auth;
+        AUTH;
 
         end(): RedisClient;
 

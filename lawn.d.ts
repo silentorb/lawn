@@ -23,11 +23,13 @@ declare class Lawn extends Vineyard.Bulb {
     public config: Lawn.Config;
     public redis_client: any;
     public http: any;
+    public debug_mode: boolean;
     public grow(): void;
     static authorization(handshakeData: any, callback: any): any;
     public debug(...args: any[]): void;
     public get_user_socket(id: number): Socket;
     public initialize_session(socket: any, user: any): void;
+    public query_user(user: any, query: Ground.Query_Builder): void;
     public start(): void;
     public get_user_from_session(token: string): Promise;
     public http_login(req: any, res: any, body: any): void;

@@ -1,38 +1,37 @@
-/// <reference path="ground.d.ts" />
+/// <reference path="node.d.ts" />
 /// <reference path="metahub.d.ts" />
+/// <reference path="ground.d.ts" />
 declare class Vineyard {
     public bulbs: any;
-    public config;
-    public config_folder;
+    public config: any;
+    public config_folder: any;
     public ground: Ground.Core;
     public root_path: string;
     constructor(config_file?: string);
-    static create_ground(db_name: string, databases, trellis_files): Ground.Core;
+    static create_ground(db_name: string, databases: any, trellis_files: any): Ground.Core;
     public get_bulb(name: string): Promise;
-    public load_bulbs(bulbs): void;
+    public load_bulbs(bulbs: any): void;
     public load(config_file: string): void;
     public start(): void;
 }
 declare module Vineyard {
-    class Bulb extends MetaHub.Meta_Object {
-        public vineyard: Vineyard;
-        public config;
-        public ground: Ground.Core;
-        constructor(vineyard: Vineyard, config);
-        public grow(): void;
-        public start(): void;
-        public stop(): void;
-    }
-}
-declare module Vineyard {
     interface IUser {
-        id?;
+        id?: any;
         name?: string;
         roles?: IRole[];
     }
     interface IRole {
-        id?;
+        id?: any;
         name?: string;
+    }
+    class Bulb extends MetaHub.Meta_Object {
+        public vineyard: Vineyard;
+        public config: any;
+        public ground: Ground.Core;
+        constructor(vineyard: Vineyard, config: any);
+        public grow(): void;
+        public start(): void;
+        public stop(): void;
     }
 }
 declare module "vineyard" {

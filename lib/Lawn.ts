@@ -24,10 +24,13 @@ class Lawn extends Vineyard.Bulb {
   config:Lawn.Config
   redis_client
   http
+  debug_mode:boolean = false
 
   grow() {
+    var ground = this.ground
+
     if (this.config.log_updates) {
-      this.listen(this.ground, '*.update', (seed, update:Ground.Update):Promise => {
+      this.listen(ground, '*.update', (seed, update:Ground.Update):Promise => {
         // Don't want an infinite loop
         if (update.trellis.name == 'update_log')
           return when.resolve()
@@ -39,13 +42,17 @@ class Lawn extends Vineyard.Bulb {
         })
       })
     }
+
+    this.listen(ground, 'user.queried', (user, query:Ground.Query_Builder)=> this.query_user(user, query))
   }
 
-  static authorization(handshakeData, callback) {
+  static
+    authorization(handshakeData, callback) {
     return callback(null, true);
   }
 
-  debug(...args:any[]) {
+  debug(...
+          args:any[]) {
     var time = Math.round(new Date().getTime() / 10);
     var text = args.join(', ');
     console.log(text)
@@ -114,7 +121,25 @@ class Lawn extends Vineyard.Bulb {
 
     this.invoke('socket.add', socket, user)
 
+    user.online = true
+    socket.broadcast.emit('user.changed', { user: user })
+
+    socket.on('disconnect', ()=> {
+      console.log('emitting disconnect for socket', socket.id)
+      user.online = false
+      socket.broadcast.emit('user.changed', { user: user })
+    })
+
     console.log(process.pid, 'Logged in: ' + user.id)
+  }
+
+  // Attach user online status to any queried users
+  query_user(user, query:Ground.Query_Builder) {
+    if (!this.io)
+      return
+
+    var clients = this.io.sockets.clients(user.id)
+    user.online = clients.length > 0
   }
 
   start() {
@@ -130,7 +155,7 @@ class Lawn extends Vineyard.Bulb {
       .then((session) => {
         console.log('session', session)
         if (!session)
-          return when.reject({status: 401, message: 'Session not found.' })
+          return when.reject({status: 401, message: 'Session not found2.' })
 
         if (session.token === 0)
           return when.reject({status: 401, message: 'Invalid session.' })
@@ -195,9 +220,16 @@ class Lawn extends Vineyard.Bulb {
           callback(user)
         }
       },
-      (error)=> socket.emit('error', {
-        'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
-      })
+      (error)=> {
+        if (this.debug_mode) {
+          console.log('error', error.message)
+          console.log('stack', error.stack)
+        }
+
+        socket.emit('error', {
+          'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
+        })
+      }
     )
   }
 
@@ -333,7 +365,7 @@ class Lawn extends Vineyard.Bulb {
             return res.status(401).send('Invalid guid.')
 
           var path = require('path')
-          var ext = path.extname(file.originalFilename)
+          var ext = path.extname(file.originalFilename) || ''
           var filename = guid + ext
           var filepath = 'files/' + filename
           var fs = require('fs')
@@ -344,7 +376,8 @@ class Lawn extends Vineyard.Bulb {
             guid: guid,
             name: filename,
             path: file.path,
-            size: file.size
+            size: file.size,
+            extension: ext.substring(1)
           }, user)
             .then((object)=> res.send({file: object}))
         },
@@ -411,9 +444,12 @@ class Lawn extends Vineyard.Bulb {
 
 }
 
-module Lawn {
+module
+Lawn {
 
-  export interface Update_Request {
+  export
+  interface
+  Update_Request {
     objects:any[];
   }
 
@@ -440,7 +476,6 @@ module Lawn {
   }
 
   export class Irrigation {
-
     static process(method:string, request:Ground.External_Query_Source, user:Vineyard.IUser, vineyard:Vineyard, socket, callback):Promise {
       var fortress = vineyard.bulbs.fortress
       var action = Irrigation[method]
@@ -478,6 +513,9 @@ module Lawn {
             response['stack'] = error.stack
           }
 
+          if (vineyard.bulbs.lawn.debug_mode)
+            console.log('error', error.stack)
+
           socket.emit('error', response)
         })
     }
@@ -487,7 +525,7 @@ module Lawn {
         throw new HttpError('Empty request', 400)
 
       var trellis = ground.sanitize_trellis_argument(request.trellis);
-      var query = new Ground.Query(trellis);
+      var query = new Ground.Query_Builder(trellis);
 
       query.extend(request)
 

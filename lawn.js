@@ -11,11 +11,14 @@ var Lawn = (function (_super) {
         _super.apply(this, arguments);
         this.instance_sockets = {};
         this.instance_user_sockets = {};
+        this.debug_mode = false;
     }
     Lawn.prototype.grow = function () {
         var _this = this;
+        var ground = this.ground;
+
         if (this.config.log_updates) {
-            this.listen(this.ground, '*.update', function (seed, update) {
+            this.listen(ground, '*.update', function (seed, update) {
                 if (update.trellis.name == 'update_log')
                     return when.resolve();
 
@@ -26,6 +29,10 @@ var Lawn = (function (_super) {
                 });
             });
         }
+
+        this.listen(ground, 'user.queried', function (user, query) {
+            return _this.query_user(user, query);
+        });
     };
 
     Lawn.authorization = function (handshakeData, callback) {
@@ -62,7 +69,24 @@ var Lawn = (function (_super) {
 
         this.invoke('socket.add', socket, user);
 
+        user.online = true;
+        socket.broadcast.emit('user.changed', { user: user });
+
+        socket.on('disconnect', function () {
+            console.log('emitting disconnect for socket', socket.id);
+            user.online = false;
+            socket.broadcast.emit('user.changed', { user: user });
+        });
+
         console.log(process.pid, 'Logged in: ' + user.id);
+    };
+
+    Lawn.prototype.query_user = function (user, query) {
+        if (!this.io)
+            return;
+
+        var clients = this.io.sockets.clients(user.id);
+        user.online = clients.length > 0;
     };
 
     Lawn.prototype.start = function () {
@@ -76,7 +100,7 @@ var Lawn = (function (_super) {
         return query.run_single().then(function (session) {
             console.log('session', session);
             if (!session)
-                return when.reject({ status: 401, message: 'Session not found.' });
+                return when.reject({ status: 401, message: 'Session not found2.' });
 
             if (session.token === 0)
                 return when.reject({ status: 401, message: 'Invalid session.' });
@@ -139,7 +163,12 @@ var Lawn = (function (_super) {
                 callback(user);
             }
         }, function (error) {
-            return socket.emit('error', {
+            if (_this.debug_mode) {
+                console.log('error', error.message);
+                console.log('stack', error.stack);
+            }
+
+            socket.emit('error', {
                 'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
             });
         });
@@ -255,7 +284,7 @@ var Lawn = (function (_super) {
                     return res.status(401).send('Invalid guid.');
 
                 var path = require('path');
-                var ext = path.extname(file.originalFilename);
+                var ext = path.extname(file.originalFilename) || '';
                 var filename = guid + ext;
                 var filepath = 'files/' + filename;
                 var fs = require('fs');
@@ -265,7 +294,8 @@ var Lawn = (function (_super) {
                     guid: guid,
                     name: filename,
                     path: file.path,
-                    size: file.size
+                    size: file.size,
+                    extension: ext.substring(1)
                 }, user).then(function (object) {
                     return res.send({ file: object });
                 });
@@ -387,6 +417,9 @@ var Lawn;
                     response['stack'] = error.stack;
                 }
 
+                if (vineyard.bulbs.lawn.debug_mode)
+                    console.log('error', error.stack);
+
                 socket.emit('error', response);
             });
         };
@@ -396,7 +429,7 @@ var Lawn;
                 throw new HttpError('Empty request', 400);
 
             var trellis = ground.sanitize_trellis_argument(request.trellis);
-            var query = new Ground.Query(trellis);
+            var query = new Ground.Query_Builder(trellis);
 
             query.extend(request);
 

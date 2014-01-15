@@ -228,6 +228,9 @@ var Lawn = (function (_super) {
         }
     };
 
+    Lawn.prototype.process_public_http_request = function (req, res, action) {
+    };
+
     Lawn.prototype.start_http = function (port) {
         var _this = this;
         if (!port)
@@ -295,7 +298,8 @@ var Lawn = (function (_super) {
                     name: filename,
                     path: file.path,
                     size: file.size,
-                    extension: ext.substring(1)
+                    extension: ext.substring(1),
+                    status: 1
                 }, user).then(function (object) {
                     return res.send({ file: object });
                 });

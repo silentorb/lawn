@@ -19,7 +19,7 @@ class Lawn extends Vineyard.Bulb {
   io // Socket IO
   instance_sockets = {}
   instance_user_sockets = {}
-  private app
+  app
   fs
   config:Lawn.Config
   redis_client
@@ -285,6 +285,10 @@ class Lawn extends Vineyard.Bulb {
     }
   }
 
+  process_public_http_request(req, res, action) {
+
+  }
+
   start_http(port) {
     if (!port)
       return
@@ -377,7 +381,8 @@ class Lawn extends Vineyard.Bulb {
             name: filename,
             path: file.path,
             size: file.size,
-            extension: ext.substring(1)
+            extension: ext.substring(1),
+            status: 1
           }, user)
             .then((object)=> res.send({file: object}))
         },

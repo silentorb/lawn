@@ -18,7 +18,7 @@ declare class Lawn extends Vineyard.Bulb {
     public io: any;
     public instance_sockets: {};
     public instance_user_sockets: {};
-    private app;
+    public app: any;
     public fs: any;
     public config: Lawn.Config;
     public redis_client: any;
@@ -36,6 +36,7 @@ declare class Lawn extends Vineyard.Bulb {
     public login(data: any, socket: ISocket, callback: any): {};
     public on_connection(socket: ISocket): Socket;
     public start_sockets(port?: any): void;
+    public process_public_http_request(req: any, res: any, action: any): void;
     public start_http(port: any): void;
     public stop(): void;
 }

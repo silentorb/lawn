@@ -195,6 +195,22 @@ var Lawn = (function (_super) {
         });
     };
 
+    Lawn.process_public_http = function (req, res, action) {
+        try  {
+            action(req, res);
+        } catch (error) {
+            var status = error.status || 500;
+            var message = status == 500 ? 'Server Error' : error.message;
+            res.json(status || 500, { message: message });
+        }
+    };
+
+    Lawn.listen_public_post = function (app, path, action) {
+        app.post(path, function (req, res) {
+            return Lawn.process_public_http(req, res, action);
+        });
+    };
+
     Lawn.prototype.start_sockets = function (port) {
         if (typeof port === "undefined") { port = null; }
         var _this = this;
@@ -226,9 +242,6 @@ var Lawn = (function (_super) {
                 redisPub: pub, redisSub: sub, redisClient: client
             }));
         }
-    };
-
-    Lawn.prototype.process_public_http_request = function (req, res, action) {
     };
 
     Lawn.prototype.start_http = function (port) {
@@ -341,6 +354,7 @@ var Lawn = (function (_super) {
         port = port || this.config.ports.http;
         console.log('HTTP listening on port ' + port + '.');
 
+        this.invoke('http.start', app, this);
         this.http = app.listen(port);
     };
 
@@ -376,6 +390,7 @@ var Lawn;
         }
         return HttpError;
     })();
+    Lawn.HttpError = HttpError;
 
     var Authorization_Error = (function (_super) {
         __extends(Authorization_Error, _super);
@@ -385,6 +400,7 @@ var Lawn;
         }
         return Authorization_Error;
     })(HttpError);
+    Lawn.Authorization_Error = Authorization_Error;
 
     var Irrigation = (function () {
         function Irrigation() {

@@ -5,15 +5,6 @@
 /// <reference path="vineyard.d.ts" />
 
 declare var Irrigation: any;
-declare module Lawn {
-    interface Config {
-        ports: any;
-        log_updates?: boolean;
-        use_redis?: boolean;
-        cookie_secret?: string;
-        log_file?: string;
-    }
-}
 declare class Lawn extends Vineyard.Bulb {
     public io: any;
     public instance_sockets: {};
@@ -35,14 +26,34 @@ declare class Lawn extends Vineyard.Bulb {
     public http_login(req: any, res: any, body: any): void;
     public login(data: any, socket: ISocket, callback: any): {};
     public on_connection(socket: ISocket): Socket;
+    static process_public_http(req: any, res: any, action: any): void;
+    static listen_public_post(app: any, path: any, action: any): void;
     public start_sockets(port?: any): void;
-    public process_public_http_request(req: any, res: any, action: any): void;
     public start_http(port: any): void;
     public stop(): void;
 }
 declare module Lawn {
+    interface Config {
+        ports: any;
+        log_updates?: boolean;
+        use_redis?: boolean;
+        cookie_secret?: string;
+        log_file?: string;
+    }
     interface Update_Request {
         objects: any[];
+    }
+    class HttpError {
+        public name: string;
+        public message: any;
+        public stack: any;
+        public status: any;
+        public details: any;
+        constructor(message: string, status?: number);
+    }
+    class Authorization_Error extends HttpError {
+        public details: any;
+        constructor(message: string, details: any);
     }
     class Irrigation {
         static process(method: string, request: Ground.External_Query_Source, user: Vineyard.IUser, vineyard: Vineyard, socket: any, callback: any): Promise;

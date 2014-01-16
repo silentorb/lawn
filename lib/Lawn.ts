@@ -4,17 +4,6 @@
 
 declare var Irrigation
 
-module Lawn {
-
-  export interface Config {
-    ports
-    log_updates?:boolean
-    use_redis?:boolean
-    cookie_secret?:string
-    log_file?:string
-  }
-}
-
 class Lawn extends Vineyard.Bulb {
   io // Socket IO
   instance_sockets = {}
@@ -252,6 +241,23 @@ class Lawn extends Vineyard.Bulb {
     });
   }
 
+  static process_public_http(req, res, action) {
+    try {
+      action(req, res)
+    }
+    catch (error) {
+      var status = error.status || 500
+      var message = status == 500 ? 'Server Error' : error.message
+      res.json(status || 500, { message: message })
+    }
+  }
+
+  static listen_public_post(app, path, action) {
+    app.post(path, (req, res)=>
+        Lawn.process_public_http(req, res, action)
+    )
+  }
+
   start_sockets(port = null) {
     var socket_io = require('socket.io')
     port = port || this.config.ports.websocket
@@ -285,10 +291,6 @@ class Lawn extends Vineyard.Bulb {
     }
   }
 
-  process_public_http_request(req, res, action) {
-
-  }
-
   start_http(port) {
     if (!port)
       return
@@ -317,11 +319,11 @@ class Lawn extends Vineyard.Bulb {
       this.get_user_from_session(req.sessionID)
         .then((user) => {
 
-          console.log('files', req.files)
-          console.log('req.body', req.body)
           var request = req.body
 
-          return Irrigation.query(request, user, this.ground, this.vineyard)
+          return this.process_public_http(req, res, (req, res)=>
+          return fortress.get_roles(user)
+            .then(()=> Irrigation.query(request, user, this.ground, this.vineyard))
             .then((objects)=> res.send({ message: 'Success', objects: objects })
           )
         })
@@ -424,6 +426,7 @@ class Lawn extends Vineyard.Bulb {
     port = port || this.config.ports.http
     console.log('HTTP listening on port ' + port + '.')
 
+    this.invoke('http.start', app, this)
     this.http = app.listen(port)
   }
 
@@ -449,16 +452,22 @@ class Lawn extends Vineyard.Bulb {
 
 }
 
-module
-Lawn {
+module Lawn {
 
-  export
-  interface
-  Update_Request {
+
+  export interface Config {
+    ports
+    log_updates?:boolean
+    use_redis?:boolean
+    cookie_secret?:string
+    log_file?:string
+  }
+
+  export interface Update_Request {
     objects:any[];
   }
 
-  class HttpError {
+  export class HttpError {
     name = "HttpError"
     message
     stack
@@ -471,7 +480,7 @@ Lawn {
     }
   }
 
-  class Authorization_Error extends HttpError {
+  export class Authorization_Error extends HttpError {
     details
 
     constructor(message:string, details) {
@@ -489,7 +498,7 @@ Lawn {
         .then((objects)=> {
           if (callback)
             callback({ code: 200, 'message': 'Success', objects: objects })
-          else
+          else if (method != 'update')
             socket.emit('error', {
               status: 400,
               message: 'Requests need to ask for an acknowledgement',
@@ -545,6 +554,9 @@ Lawn {
     }
 
     static update(request:Update_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      if (!MetaHub.is_array(request.objects))
+        throw new Error('Update is missing objects list.', 400)
+
       var updates = request.objects.map((object)=>
           ground.create_update(object.trellis, object, user)
       )

@@ -387,7 +387,10 @@ class Lawn extends Vineyard.Bulb {
             extension: ext.substring(1),
             status: 1
           }, user)
-            .then((object)=> res.send({file: object}))
+            .then((object)=> {
+              res.send({file: object})
+              this.invoke('file.uploaded', object)
+            })
         },
         (error)=> res.status(error.status).send(error.message)
       )

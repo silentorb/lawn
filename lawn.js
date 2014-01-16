@@ -317,7 +317,8 @@ var Lawn = (function (_super) {
                     extension: ext.substring(1),
                     status: 1
                 }, user).then(function (object) {
-                    return res.send({ file: object });
+                    res.send({ file: object });
+                    _this.invoke('file.uploaded', object);
                 });
             }, function (error) {
                 return res.status(error.status).send(error.message);

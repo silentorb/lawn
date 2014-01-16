@@ -57,56 +57,13 @@ class Lawn extends Vineyard.Bulb {
     this.instance_user_sockets[user.id] = socket
     socket.join(user.id)
 
-    socket.on('query', (request, callback)=> {
-      Irrigation.process('query', request, user, this.vineyard, socket, callback)
-//      Irrigation.query(request, user, this.ground, this.vineyard)
-//        .done((objects)=> {
-//          if (callback)
-//            callback({ code: 200, 'message': 'Success', objects: objects })
-//          else
-//            socket.emit('error', {
-//              'code': 400,
-//              'message': 'Request must ask for an acknowledgement',
-//              request: request
-//            })
-//        },
-//        (error)=> {
-//          callback({ code: 403, 'message': 'You are not authorized to perform this query.', objects: [] })
-//          socket.emit('error', {
-//            'code': 403,
-//            'message': 'Unauthorized',
-//            request: request
-//          })
-//        })
-    })
+    socket.on('query', (request, callback)=>
+        Irrigation.process('query', request, user, this.vineyard, socket, callback)
+    )
 
-    socket.on('update', (request, callback)=> {
-      Irrigation.process('update', request, user, this.vineyard, socket, callback)
-//      Irrigation.update(request, user, this.ground, this.vineyard)
-//        .then((objects)=> {
-//          if (callback)
-//            callback({ code: 200, 'message': 'Success', objects: objects })
-//          else
-//            socket.emit('error', {
-//              'code': 400,
-//              'message': 'Request must ask for an acknowledgement',
-//              request: request
-//            })
-//        },
-//        (error)=> {
-////          if (callback)
-////            callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [],
-////              unauthorized_object: error.resource})
-////          else
-//          socket.emit('error', {
-//            'code': 403,
-//            'message': 'Unauthorized',
-//            request: request,
-//            unauthorized_object: error.resource
-//          })
-//        }
-//      )
-    })
+    socket.on('update', (request, callback)=>
+        Irrigation.process('update', request, user, this.vineyard, socket, callback)
+    )
 
     this.invoke('socket.add', socket, user)
 
@@ -139,22 +96,26 @@ class Lawn extends Vineyard.Bulb {
   get_user_from_session(token:string):Promise {
     var query = this.ground.create_query('session')
     query.add_key_filter(token)
+    query.add_subquery('user').add_subquery('roles')
+
     return query.run_single()
 //      .then(()=> { throw new Error('Debug error') })
       .then((session) => {
         console.log('session', session)
         if (!session)
-          return when.reject({status: 401, message: 'Session not found2.' })
+          throw new Lawn.HttpError('Session not found.', 400)
 
         if (session.token === 0)
-          return when.reject({status: 401, message: 'Invalid session.' })
+          throw new Lawn.HttpError('Invalid session.', 400)
 
         if (typeof session.user !== 'object')
-          return when.reject({status: 401, message: 'User not found.' })
+          throw new Lawn.HttpError('User not found.', 400)
 
+        var user = session.user
         return {
-          id: session.user.id,
-          name: session.user.name
+          id: user.id,
+          name: user.name,
+          roles: user.roles
         }
       })
   }
@@ -258,6 +219,56 @@ class Lawn extends Vineyard.Bulb {
     )
   }
 
+
+  process_error(error, user) {
+    var status = error.status || 500
+    var message = status == 500 ? 'Server Error' : error.message
+
+    var response = {
+      status: status,
+      message: message
+    }
+
+    var fortress = this.vineyard.bulbs.fortress
+    if (user && fortress && fortress.user_has_role(user, 'admin')) {
+      response.message = error.message || "Server Error"
+      response['stack'] = error.stack
+      response['details'] = error.details
+    }
+
+    console.log('service error:', status, error.message, error.stack)
+
+    return response
+  }
+
+  process_user_http(req, res, action) {
+    var user = null, send_error = (error)=> {
+      var response = this.process_error(error, user)
+      var status = response.status
+      delete response.status
+      res.json(status, response)
+    }
+    try {
+      this.get_user_from_session(req.sessionID)
+        .then((u)=> {
+          user = u
+          return action(req, res, user)
+        })
+        .done(()=> {}, send_error)
+    }
+    catch (error) {
+      send_error(error)
+    }
+  }
+
+  listen_user_post(path, action) {
+    this.app.post(path, (req, res)=> {
+        console.log('server recieved query request.')
+        this.process_user_http(req, res, action)
+      }
+    )
+  }
+
   start_sockets(port = null) {
     var socket_io = require('socket.io')
     port = port || this.config.ports.websocket
@@ -314,47 +325,12 @@ class Lawn extends Vineyard.Bulb {
 
     app.post('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
     app.get('/vineyard/login', (req, res)=> this.http_login(req, res, req.query))
-
-    app.post('/vineyard/query', (req, res):any => {
-      this.get_user_from_session(req.sessionID)
-        .then((user) => {
-
-          var request = req.body
-
-          var fortress = this.vineyard.bulbs.fortress
-          return Lawn.process_public_http(req, res, (req, res)=>
-            fortress.get_roles(user)
-              .then(()=> Irrigation.query(request, user, this.ground, this.vineyard))
-              .then((objects)=> res.send({ message: 'Success', objects: objects })
-            ))
-        })
-        .otherwise((error)=> {
-          res.json(error.status || 500, { message: error.message })
-        })
+    this.listen_user_post('/vineyard/query', (req, res, user)=> {
+      console.log('server recieved query request.')
+      return Irrigation.query(req.body, user, this.ground, this.vineyard)
+        .then((objects)=> res.send({ message: 'Success', objects: objects })
+      )
     })
-
-//    app.post('/vineyard/update', (req, res):any => {
-//      this.get_user_from_session(req.sessionID)
-//        .then((user) => {
-//
-//          console.log('files', req.files)
-//          console.log('req.body', req.body)
-//          var request = JSON.parse(req.body)
-//
-//          Irrigation.update(request, user, this.ground, this.vineyard)
-//            .then((objects)=> callback({ code: 200, 'message': 'Success', objects: objects}),
-//            (error)=> {
-//              callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [] })
-//              socket.emit('error', {
-//                'code': 401,
-//                'message': 'Unauthorized',
-//                request: request
-//              })
-//            })
-//        },
-//        (error)=> res.status(error.status).send(error.message)
-//      )
-//    })
 
     app.post('/vineyard/upload', (req, res):any => {
       this.get_user_from_session(req.sessionID)
@@ -458,7 +434,6 @@ class Lawn extends Vineyard.Bulb {
 
 module Lawn {
 
-
   export interface Config {
     ports
     log_updates?:boolean
@@ -522,13 +497,13 @@ module Lawn {
             code: status,
             status: status,
             request: request,
-            details: error.details,
-            message: error.message || "Server Error"
+            message: status == 500 ? "Server Error" : error.message
           }
 
           if (fortress.user_has_role(user, 'admin')) {
-            response.message = status == 500 ? 'Server Error' : error.message || "Server Error"
+            response.message = error.message || "Server Error"
             response['stack'] = error.stack
+            details: error.details
           }
 
           if (vineyard.bulbs.lawn.debug_mode)

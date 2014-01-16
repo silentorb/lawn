@@ -60,11 +60,11 @@ var Lawn = (function (_super) {
         socket.join(user.id);
 
         socket.on('query', function (request, callback) {
-            Irrigation.process('query', request, user, _this.vineyard, socket, callback);
+            return Irrigation.process('query', request, user, _this.vineyard, socket, callback);
         });
 
         socket.on('update', function (request, callback) {
-            Irrigation.process('update', request, user, _this.vineyard, socket, callback);
+            return Irrigation.process('update', request, user, _this.vineyard, socket, callback);
         });
 
         this.invoke('socket.add', socket, user);
@@ -97,20 +97,24 @@ var Lawn = (function (_super) {
     Lawn.prototype.get_user_from_session = function (token) {
         var query = this.ground.create_query('session');
         query.add_key_filter(token);
+        query.add_subquery('user').add_subquery('roles');
+
         return query.run_single().then(function (session) {
             console.log('session', session);
             if (!session)
-                return when.reject({ status: 401, message: 'Session not found2.' });
+                throw new Lawn.HttpError('Session not found.', 400);
 
             if (session.token === 0)
-                return when.reject({ status: 401, message: 'Invalid session.' });
+                throw new Lawn.HttpError('Invalid session.', 400);
 
             if (typeof session.user !== 'object')
-                return when.reject({ status: 401, message: 'User not found.' });
+                throw new Lawn.HttpError('User not found.', 400);
 
+            var user = session.user;
             return {
-                id: session.user.id,
-                name: session.user.name
+                id: user.id,
+                name: user.name,
+                roles: user.roles
             };
         });
     };
@@ -211,6 +215,54 @@ var Lawn = (function (_super) {
         });
     };
 
+    Lawn.prototype.process_error = function (error, user) {
+        var status = error.status || 500;
+        var message = status == 500 ? 'Server Error' : error.message;
+
+        var response = {
+            status: status,
+            message: message
+        };
+
+        var fortress = this.vineyard.bulbs.fortress;
+        if (user && fortress && fortress.user_has_role(user, 'admin')) {
+            response.message = error.message || "Server Error";
+            response['stack'] = error.stack;
+            response['details'] = error.details;
+        }
+
+        console.log('service error:', status, error.message, error.stack);
+
+        return response;
+    };
+
+    Lawn.prototype.process_user_http = function (req, res, action) {
+        var _this = this;
+        var user = null, send_error = function (error) {
+            var response = _this.process_error(error, user);
+            var status = response.status;
+            delete response.status;
+            res.json(status, response);
+        };
+        try  {
+            this.get_user_from_session(req.sessionID).then(function (u) {
+                user = u;
+                return action(req, res, user);
+            }).done(function () {
+            }, send_error);
+        } catch (error) {
+            send_error(error);
+        }
+    };
+
+    Lawn.prototype.listen_user_post = function (path, action) {
+        var _this = this;
+        this.app.post(path, function (req, res) {
+            console.log('server recieved query request.');
+            _this.process_user_http(req, res, action);
+        });
+    };
+
     Lawn.prototype.start_sockets = function (port) {
         if (typeof port === "undefined") { port = null; }
         var _this = this;
@@ -271,21 +323,10 @@ var Lawn = (function (_super) {
         app.get('/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.query);
         });
-
-        app.post('/vineyard/query', function (req, res) {
-            _this.get_user_from_session(req.sessionID).then(function (user) {
-                var request = req.body;
-
-                var fortress = _this.vineyard.bulbs.fortress;
-                return Lawn.process_public_http(req, res, function (req, res) {
-                    return fortress.get_roles(user).then(function () {
-                        return Irrigation.query(request, user, _this.ground, _this.vineyard);
-                    }).then(function (objects) {
-                        return res.send({ message: 'Success', objects: objects });
-                    });
-                });
-            }).otherwise(function (error) {
-                res.json(error.status || 500, { message: error.message });
+        this.listen_user_post('/vineyard/query', function (req, res, user) {
+            console.log('server recieved query request.');
+            return Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (objects) {
+                return res.send({ message: 'Success', objects: objects });
             });
         });
 
@@ -432,13 +473,14 @@ var Lawn;
                     code: status,
                     status: status,
                     request: request,
-                    details: error.details,
-                    message: error.message || "Server Error"
+                    message: status == 500 ? "Server Error" : error.message
                 };
 
                 if (fortress.user_has_role(user, 'admin')) {
-                    response.message = status == 500 ? 'Server Error' : error.message || "Server Error";
+                    response.message = error.message || "Server Error";
                     response['stack'] = error.stack;
+                    details:
+                    error.details;
                 }
 
                 if (vineyard.bulbs.lawn.debug_mode)

@@ -80,8 +80,8 @@ declare module Ground {
         filters?: Query_Filter_Source[];
         sorts?: Ground.Query_Sort[];
         expansions?: string[];
-        reductions?: string[];
         properties?: any[];
+        subqueries?: any;
     }
     interface External_Query_Source extends Property_Query_Source {
         trellis: string;
@@ -397,11 +397,13 @@ declare module Ground {
         public source: Ground.External_Query_Source;
         public include_links: boolean;
         public transforms: Query_Transform[];
+        public subqueries: {};
         public filters: Query_Filter[];
         constructor(trellis: Ground.Trellis);
         public add_filter(property_name: string, value?: any, operator?: string): void;
         public add_key_filter(value: any): void;
         public add_sort(sort: Query_Sort): void;
+        public add_subquery(property_name: string, source?: Ground.External_Query_Source): Query_Builder;
         public add_transform_clause(clause: string): void;
         public create_runner(): Ground.Query_Runner;
         static create_join_filter(property: Ground.Property, seed: any): Query_Filter;

@@ -321,11 +321,12 @@ class Lawn extends Vineyard.Bulb {
 
           var request = req.body
 
-          return this.process_public_http(req, res, (req, res)=>
-          return fortress.get_roles(user)
-            .then(()=> Irrigation.query(request, user, this.ground, this.vineyard))
-            .then((objects)=> res.send({ message: 'Success', objects: objects })
-          )
+          var fortress = this.vineyard.bulbs.fortress
+          return Lawn.process_public_http(req, res, (req, res)=>
+            fortress.get_roles(user)
+              .then(()=> Irrigation.query(request, user, this.ground, this.vineyard))
+              .then((objects)=> res.send({ message: 'Success', objects: objects })
+            ))
         })
         .otherwise((error)=> {
           res.json(error.status || 500, { message: error.message })
@@ -555,7 +556,7 @@ module Lawn {
 
     static update(request:Update_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
       if (!MetaHub.is_array(request.objects))
-        throw new Error('Update is missing objects list.', 400)
+        throw new HttpError('Update is missing objects list.', 400)
 
       var updates = request.objects.map((object)=>
           ground.create_update(object.trellis, object, user)

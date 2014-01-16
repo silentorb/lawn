@@ -274,12 +274,15 @@ var Lawn = (function (_super) {
 
         app.post('/vineyard/query', function (req, res) {
             _this.get_user_from_session(req.sessionID).then(function (user) {
-                console.log('files', req.files);
-                console.log('req.body', req.body);
                 var request = req.body;
 
-                return Irrigation.query(request, user, _this.ground, _this.vineyard).then(function (objects) {
-                    return res.send({ message: 'Success', objects: objects });
+                var fortress = _this.vineyard.bulbs.fortress;
+                return Lawn.process_public_http(req, res, function (req, res) {
+                    return fortress.get_roles(user).then(function () {
+                        return Irrigation.query(request, user, _this.ground, _this.vineyard);
+                    }).then(function (objects) {
+                        return res.send({ message: 'Success', objects: objects });
+                    });
                 });
             }).otherwise(function (error) {
                 res.json(error.status || 500, { message: error.message });
@@ -413,7 +416,7 @@ var Lawn;
             }).then(function (objects) {
                 if (callback)
                     callback({ code: 200, 'message': 'Success', objects: objects });
-                else
+                else if (method != 'update')
                     socket.emit('error', {
                         status: 400,
                         message: 'Requests need to ask for an acknowledgement',
@@ -463,6 +466,9 @@ var Lawn;
         };
 
         Irrigation.update = function (request, user, ground, vineyard) {
+            if (!MetaHub.is_array(request.objects))
+                throw new HttpError('Update is missing objects list.', 400);
+
             var updates = request.objects.map(function (object) {
                 return ground.create_update(object.trellis, object, user);
             });

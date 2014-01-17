@@ -249,7 +249,7 @@ var Lawn = (function (_super) {
             this.get_user_from_session(req.sessionID).then(function (u) {
                 user = u;
                 return action(req, res, user);
-            }).then(function () {
+            }).done(function () {
             }, send_error);
         } catch (error) {
             send_error(error);

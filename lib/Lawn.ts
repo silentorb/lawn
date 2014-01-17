@@ -213,12 +213,11 @@ class Lawn extends Vineyard.Bulb {
     }
   }
 
-  static listen_public_post(app, path, action) {
-    app.post(path, (req, res)=>
+  static listen_public_http(app, path, action, method = 'post') {
+    app[method](path, (req, res)=>
         Lawn.process_public_http(req, res, action)
     )
   }
-
 
   process_error(error, user) {
     var status = error.status || 500
@@ -254,15 +253,16 @@ class Lawn extends Vineyard.Bulb {
           user = u
           return action(req, res, user)
         })
-        .done(()=> {}, send_error)
+        .done(()=> {
+        }, send_error)
     }
     catch (error) {
       send_error(error)
     }
   }
 
-  listen_user_post(path, action) {
-    this.app.post(path, (req, res)=> {
+  listen_user_http(path, action, method = 'post') {
+    this.app[method](path, (req, res)=> {
         console.log('server recieved query request.')
         this.process_user_http(req, res, action)
       }
@@ -325,84 +325,75 @@ class Lawn extends Vineyard.Bulb {
 
     app.post('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
     app.get('/vineyard/login', (req, res)=> this.http_login(req, res, req.query))
-    this.listen_user_post('/vineyard/query', (req, res, user)=> {
+    this.listen_user_http('/vineyard/query', (req, res, user)=> {
       console.log('server recieved query request.')
       return Irrigation.query(req.body, user, this.ground, this.vineyard)
         .then((objects)=> res.send({ message: 'Success', objects: objects })
       )
     })
 
-    app.post('/vineyard/upload', (req, res):any => {
-      this.get_user_from_session(req.sessionID)
-        .then((user) => {
+    this.listen_user_http('/vineyard/upload', (req, res, user)=> {
+      console.log('files', req.files)
+      console.log('req.body', req.body)
+      var info = JSON.parse(req.body.info)
+      var file = req.files.file;
+      var guid = info.guid;
+      if (!guid)
+        throw new Lawn.HttpError('guid is empty.', 400)
 
-          console.log('files', req.files)
-          console.log('req.body', req.body)
-          var info = JSON.parse(req.body.info)
-          var file = req.files.file;
-          var guid = info.guid;
-          if (!guid)
-            return res.status(401).send('guid is empty.')
+      if (!guid.match(/[\w\-]+/))
+        throw new Lawn.HttpError('Invalid guid.', 400)
 
-          if (!guid.match(/[\w\-]+/))
-            return res.status(401).send('Invalid guid.')
+      var path = require('path')
+      var ext = path.extname(file.originalFilename) || ''
+      var filename = guid + ext
+      var filepath = 'files/' + filename
+      var fs = require('fs')
+      fs.rename(file.path, filepath);
 
-          var path = require('path')
-          var ext = path.extname(file.originalFilename) || ''
-          var filename = guid + ext
-          var filepath = 'files/' + filename
-          var fs = require('fs')
-          fs.rename(file.path, filepath);
-
-          // !!! Add check if file already exists
-          this.ground.update_object('file', {
-            guid: guid,
-            name: filename,
-            path: file.path,
-            size: file.size,
-            extension: ext.substring(1),
-            status: 1
-          }, user)
-            .then((object)=> {
-              res.send({file: object})
-              this.invoke('file.uploaded', object)
-            })
-        },
-        (error)=> res.status(error.status).send(error.message)
-      )
+      // !!! Add check if file already exists
+      return this.ground.update_object('file', {
+        guid: guid,
+        name: filename,
+        path: file.path,
+        size: file.size,
+        extension: ext.substring(1),
+        status: 1
+      }, user)
+        .then((object)=> {
+          res.send({file: object})
+          this.invoke('file.uploaded', object)
+        })
     })
 
-    app.get('/file/:guid.:ext', (req, res)=> {
+    this.listen_user_http('/file/:guid.:ext', (req, res, user)=> {
       var guid = req.params.guid;
       var ext = req.params.ext;
-      if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/)) {
-        return res.status(401).send('Invalid File Name')
-      }
+      if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/))
+        throw new Lawn.HttpError('Invalid File Name', 400)
+
       var fs = require('fs')
       var path = require('path')
       var filepath = path.join(this.vineyard.root_path, 'files', guid + '.' + ext)
       console.log(filepath)
       fs.exists(filepath, (exists)=> {
         if (!exists)
-          return res.status(404).send('File Not Found')
+          throw new Lawn.HttpError('File Not Found', 404)
 
         var query = this.ground.create_query('file')
         query.add_key_filter(req.params.guid)
         var fortress = this.vineyard.bulbs.fortress
 
-        this.get_user_from_session(req.sessionID)
-          .then((user)=> fortress.query_access(user, query))
+        fortress.query_access(user, query)
           .then((result)=> {
             if (result.access)
               res.sendfile(filepath)
             else
-              res.status(403).send('Access Denied')
-          },
-          ()=> res.status(500).send('Internal Server Error')
-        )
-//          res.end()
+              throw new Lawn.HttpError('Access Denied', 403)
+          })
       })
-    })
+    }, 'get')
+
     port = port || this.config.ports.http
     console.log('HTTP listening on port ' + port + '.')
 

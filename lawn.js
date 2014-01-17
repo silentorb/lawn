@@ -209,8 +209,9 @@ var Lawn = (function (_super) {
         }
     };
 
-    Lawn.listen_public_post = function (app, path, action) {
-        app.post(path, function (req, res) {
+    Lawn.listen_public_http = function (app, path, action, method) {
+        if (typeof method === "undefined") { method = 'post'; }
+        app[method](path, function (req, res) {
             return Lawn.process_public_http(req, res, action);
         });
     };
@@ -255,9 +256,10 @@ var Lawn = (function (_super) {
         }
     };
 
-    Lawn.prototype.listen_user_post = function (path, action) {
+    Lawn.prototype.listen_user_http = function (path, action, method) {
+        if (typeof method === "undefined") { method = 'post'; }
         var _this = this;
-        this.app.post(path, function (req, res) {
+        this.app[method](path, function (req, res) {
             console.log('server recieved query request.');
             _this.process_user_http(req, res, action);
         });
@@ -323,79 +325,72 @@ var Lawn = (function (_super) {
         app.get('/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.query);
         });
-        this.listen_user_post('/vineyard/query', function (req, res, user) {
+        this.listen_user_http('/vineyard/query', function (req, res, user) {
             console.log('server recieved query request.');
             return Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (objects) {
                 return res.send({ message: 'Success', objects: objects });
             });
         });
 
-        app.post('/vineyard/upload', function (req, res) {
-            _this.get_user_from_session(req.sessionID).then(function (user) {
-                console.log('files', req.files);
-                console.log('req.body', req.body);
-                var info = JSON.parse(req.body.info);
-                var file = req.files.file;
-                var guid = info.guid;
-                if (!guid)
-                    return res.status(401).send('guid is empty.');
+        this.listen_user_http('/vineyard/upload', function (req, res, user) {
+            console.log('files', req.files);
+            console.log('req.body', req.body);
+            var info = JSON.parse(req.body.info);
+            var file = req.files.file;
+            var guid = info.guid;
+            if (!guid)
+                throw new Lawn.HttpError('guid is empty.', 400);
 
-                if (!guid.match(/[\w\-]+/))
-                    return res.status(401).send('Invalid guid.');
+            if (!guid.match(/[\w\-]+/))
+                throw new Lawn.HttpError('Invalid guid.', 400);
 
-                var path = require('path');
-                var ext = path.extname(file.originalFilename) || '';
-                var filename = guid + ext;
-                var filepath = 'files/' + filename;
-                var fs = require('fs');
-                fs.rename(file.path, filepath);
+            var path = require('path');
+            var ext = path.extname(file.originalFilename) || '';
+            var filename = guid + ext;
+            var filepath = 'files/' + filename;
+            var fs = require('fs');
+            fs.rename(file.path, filepath);
 
-                _this.ground.update_object('file', {
-                    guid: guid,
-                    name: filename,
-                    path: file.path,
-                    size: file.size,
-                    extension: ext.substring(1),
-                    status: 1
-                }, user).then(function (object) {
-                    res.send({ file: object });
-                    _this.invoke('file.uploaded', object);
-                });
-            }, function (error) {
-                return res.status(error.status).send(error.message);
+            return _this.ground.update_object('file', {
+                guid: guid,
+                name: filename,
+                path: file.path,
+                size: file.size,
+                extension: ext.substring(1),
+                status: 1
+            }, user).then(function (object) {
+                res.send({ file: object });
+                _this.invoke('file.uploaded', object);
             });
         });
 
-        app.get('/file/:guid.:ext', function (req, res) {
+        this.listen_user_http('/file/:guid.:ext', function (req, res, user) {
             var guid = req.params.guid;
             var ext = req.params.ext;
-            if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/)) {
-                return res.status(401).send('Invalid File Name');
-            }
+            if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/))
+                throw new Lawn.HttpError('Invalid File Name', 400);
+
             var fs = require('fs');
             var path = require('path');
             var filepath = path.join(_this.vineyard.root_path, 'files', guid + '.' + ext);
             console.log(filepath);
             fs.exists(filepath, function (exists) {
                 if (!exists)
-                    return res.status(404).send('File Not Found');
+                    throw new Lawn.HttpError('File Not Found', 404);
 
                 var query = _this.ground.create_query('file');
                 query.add_key_filter(req.params.guid);
                 var fortress = _this.vineyard.bulbs.fortress;
 
-                _this.get_user_from_session(req.sessionID).then(function (user) {
-                    return fortress.query_access(user, query);
-                }).then(function (result) {
+                fortress.query_access(user, query).then(function (result) {
                     if (result.access)
                         res.sendfile(filepath);
                     else
-                        res.status(403).send('Access Denied');
-                }, function () {
-                    return res.status(500).send('Internal Server Error');
+                        throw new Lawn.HttpError('Access Denied', 403);
                 });
             });
-        });
+        }, 'get');
+
         port = port || this.config.ports.http;
         console.log('HTTP listening on port ' + port + '.');
 

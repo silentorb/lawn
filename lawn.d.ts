@@ -27,13 +27,13 @@ declare class Lawn extends Vineyard.Bulb {
     public login(data: any, socket: ISocket, callback: any): {};
     public on_connection(socket: ISocket): Socket;
     static process_public_http(req: any, res: any, action: any): void;
-    static listen_public_post(app: any, path: any, action: any): void;
+    static listen_public_http(app: any, path: any, action: any, method?: string): void;
     public process_error(error: any, user: any): {
         status: any;
         message: any;
     };
     public process_user_http(req: any, res: any, action: any): void;
-    public listen_user_post(path: any, action: any): void;
+    public listen_user_http(path: any, action: any, method?: string): void;
     public start_sockets(port?: any): void;
     public start_http(port: any): void;
     public stop(): void;

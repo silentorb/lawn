@@ -253,7 +253,7 @@ class Lawn extends Vineyard.Bulb {
           user = u
           return action(req, res, user)
         })
-        .done(()=> {
+        .then(()=> {
         }, send_error)
     }
     catch (error) {

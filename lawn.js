@@ -240,6 +240,7 @@ var Lawn = (function (_super) {
     Lawn.prototype.process_user_http = function (req, res, action) {
         var _this = this;
         var user = null, send_error = function (error) {
+            console.log('yeah');
             var response = _this.process_error(error, user);
             var status = response.status;
             delete response.status;
@@ -296,6 +297,14 @@ var Lawn = (function (_super) {
                 redisPub: pub, redisSub: sub, redisClient: client
             }));
         }
+    };
+
+    Lawn.file_exists = function (filepath) {
+        var fs = require('fs'), def = when.defer();
+        fs.exists(filepath, function (exists) {
+            def.resolve(exists);
+        });
+        return def.promise;
     };
 
     Lawn.prototype.start_http = function (port) {
@@ -370,13 +379,12 @@ var Lawn = (function (_super) {
             if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/))
                 throw new Lawn.HttpError('Invalid File Name', 400);
 
-            var fs = require('fs');
             var path = require('path');
             var filepath = path.join(_this.vineyard.root_path, 'files', guid + '.' + ext);
             console.log(filepath);
-            fs.exists(filepath, function (exists) {
+            return Lawn.file_exists(filepath).then(function (exists) {
                 if (!exists)
-                    throw new Lawn.HttpError('File Not Found', 404);
+                    throw new Error('File Not Found2');
 
                 var query = _this.ground.create_query('file');
                 query.add_key_filter(req.params.guid);

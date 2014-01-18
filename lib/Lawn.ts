@@ -242,6 +242,7 @@ class Lawn extends Vineyard.Bulb {
 
   process_user_http(req, res, action) {
     var user = null, send_error = (error)=> {
+      console.log('yeah')
       var response = this.process_error(error, user)
       var status = response.status
       delete response.status
@@ -300,6 +301,14 @@ class Lawn extends Vineyard.Bulb {
         redisPub: pub, redisSub: sub, redisClient: client
       }))
     }
+  }
+
+  private static file_exists(filepath:string):Promise {
+    var fs = require('fs'), def = when.defer()
+    fs.exists(filepath, (exists)=> {
+      def.resolve(exists)
+    })
+    return def.promise
   }
 
   start_http(port) {
@@ -372,26 +381,27 @@ class Lawn extends Vineyard.Bulb {
       if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/))
         throw new Lawn.HttpError('Invalid File Name', 400)
 
-      var fs = require('fs')
       var path = require('path')
       var filepath = path.join(this.vineyard.root_path, 'files', guid + '.' + ext)
       console.log(filepath)
-      fs.exists(filepath, (exists)=> {
-        if (!exists)
-          throw new Lawn.HttpError('File Not Found', 404)
+      return Lawn.file_exists(filepath)
+        .then((exists)=> {
+          if (!exists)
+//          throw new Lawn.HttpError('File Not Found', 404)
+            throw new Error('File Not Found2')
 
-        var query = this.ground.create_query('file')
-        query.add_key_filter(req.params.guid)
-        var fortress = this.vineyard.bulbs.fortress
+          var query = this.ground.create_query('file')
+          query.add_key_filter(req.params.guid)
+          var fortress = this.vineyard.bulbs.fortress
 
-        fortress.query_access(user, query)
-          .then((result)=> {
-            if (result.access)
-              res.sendfile(filepath)
-            else
-              throw new Lawn.HttpError('Access Denied', 403)
-          })
-      })
+          fortress.query_access(user, query)
+            .then((result)=> {
+              if (result.access)
+                res.sendfile(filepath)
+              else
+                throw new Lawn.HttpError('Access Denied', 403)
+            })
+        })
     }, 'get')
 
     port = port || this.config.ports.http

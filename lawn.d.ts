@@ -35,6 +35,7 @@ declare class Lawn extends Vineyard.Bulb {
     public process_user_http(req: any, res: any, action: any): void;
     public listen_user_http(path: any, action: any, method?: string): void;
     public start_sockets(port?: any): void;
+    private static file_exists(filepath);
     public start_http(port: any): void;
     public stop(): void;
 }

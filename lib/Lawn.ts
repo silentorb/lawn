@@ -124,32 +124,114 @@ class Lawn extends Vineyard.Bulb {
     console.log('login', body)
     var mysql = require('mysql')
     this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass])
-//    this.ground.db.query("SELECT id, name FROM users WHERE name = '"+ body.name + "' AND password = '" + body.pass + "'")
       .then((rows)=> {
         if (rows.length == 0) {
-          return res.status(401).send('Invalid login info.')
+          throw new Lawn.HttpError('Invalid login info.', 400)
         }
 
         var user = rows[0];
+        return this.create_session(user, req)
+          .then(()=> Lawn.send_http_login_success(req, res, user))
+      })
+  }
 
-        var session = [
-          user.id,
-          req.sessionID,
-          req.host,
-          Math.round(new Date().getTime() / 1000)
-        ]
-        console.log('insert-login', body)
-        this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
-          .then(()=> {
-            res.send({
-              token: req.sessionID,
-              message: 'Login successful',
-              user: {
-                id: user.id,
-                name: user.name
-              }
-            });
-          })
+  create_session(user, req):Promise {
+    var ip = req.headers['x-forwarded-for'] ||
+      req.connection.remoteAddress ||
+      req.socket.remoteAddress ||
+      req.connection.socket.remoteAddress
+
+    var session = [
+      user.id,
+      req.sessionID,
+      ip,
+      Math.round(new Date().getTime() / 1000)
+    ]
+
+    return this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
+      .then(() => session)
+  }
+
+  static send_http_login_success(req, res, user) {
+    res.send({
+      token: req.sessionID,
+      message: 'Login successful',
+      user: {
+        id: user.id,
+        name: user.name
+      }
+    })
+  }
+
+  get_facebook_user(body) {
+    if (typeof body.user_token != 'string' && typeof body.user_token != 'number')
+      throw new Lawn.HttpError('Requires either valid facebook user id or email address.', 400)
+
+    var options = {
+      host: 'graph.facebook.com',
+      path: 'debug_token?'
+        + 'input_token=' + body.user_token
+        + '&access_token=' + this.config['facebook_app_token'],
+      method: 'POST'
+    }
+
+    return Lawn.request(options)
+      .then((response) => {
+        console.log('facebook-check', response)
+      })
+
+//    return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [body.facebook_user_id])
+//      .then((user)=> {
+//
+//      })
+
+  }
+
+  static request(options, data = null):Promise {
+    var def = when.defer()
+    var http = require('http')
+
+    var req = http.request(options, function (res) {
+      if (res.statusCode != '200') {
+        res.setEncoding('utf8')
+        res.on('data', function (chunk) {
+          console.log('client received an error:', res.statusCode, chunk)
+          def.reject()
+        })
+      }
+      else {
+        res.on('data', function (data) {
+          res.content = JSON.parse(data)
+          def.resolve(res)
+        })
+      }
+    })
+
+    if (data)
+      req.write(JSON.stringify(data))
+
+    req.end()
+
+    req.on('error', function (e) {
+      console.log('problem with request: ' + e.message);
+      def.reject()
+    })
+
+    return def.promise
+  }
+
+  facebook_login(req, res, body):Promise {
+    console.log('facebook-login', body)
+    var mysql = require('mysql')
+
+    return this.get_facebook_user(body)
+      .then((user)=> {
+        if (!user) {
+          throw new Lawn.HttpError('Invalid login info.', 400)
+        }
+
+        this.create_session(user, req)
+          .then(()=> Lawn.send_http_login_success(req, res, user))
       })
   }
 
@@ -203,14 +285,13 @@ class Lawn extends Vineyard.Bulb {
   }
 
   static process_public_http(req, res, action) {
-    try {
-      action(req, res)
-    }
-    catch (error) {
-      var status = error.status || 500
-      var message = status == 500 ? 'Server Error' : error.message
-      res.json(status || 500, { message: message })
-    }
+    action(req, res)
+      .done(()=> {
+      }, (error)=> {
+        var status = error.status || 500
+        var message = status == 500 ? 'Server Error' : error.message
+        res.json(status || 500, { message: message })
+      })
   }
 
   static listen_public_http(app, path, action, method = 'post') {
@@ -430,7 +511,6 @@ class Lawn extends Vineyard.Bulb {
       this.app = null
     }
   }
-
 }
 
 module Lawn {

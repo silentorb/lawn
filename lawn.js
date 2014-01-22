@@ -125,27 +125,102 @@ var Lawn = (function (_super) {
         var mysql = require('mysql');
         this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
             if (rows.length == 0) {
-                return res.status(401).send('Invalid login info.');
+                throw new Lawn.HttpError('Invalid login info.', 400);
             }
 
             var user = rows[0];
+            return _this.create_session(user, req).then(function () {
+                return Lawn.send_http_login_success(req, res, user);
+            });
+        });
+    };
 
-            var session = [
-                user.id,
-                req.sessionID,
-                req.host,
-                Math.round(new Date().getTime() / 1000)
-            ];
-            console.log('insert-login', body);
-            _this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session).then(function () {
-                res.send({
-                    token: req.sessionID,
-                    message: 'Login successful',
-                    user: {
-                        id: user.id,
-                        name: user.name
-                    }
+    Lawn.prototype.create_session = function (user, req) {
+        var ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress;
+
+        var session = [
+            user.id,
+            req.sessionID,
+            ip,
+            Math.round(new Date().getTime() / 1000)
+        ];
+
+        return this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session).then(function () {
+            return session;
+        });
+    };
+
+    Lawn.send_http_login_success = function (req, res, user) {
+        res.send({
+            token: req.sessionID,
+            message: 'Login successful',
+            user: {
+                id: user.id,
+                name: user.name
+            }
+        });
+    };
+
+    Lawn.prototype.get_facebook_user = function (body) {
+        if (typeof body.user_token != 'string' && typeof body.user_token != 'number')
+            throw new Lawn.HttpError('Requires either valid facebook user id or email address.', 400);
+
+        var options = {
+            host: 'graph.facebook.com',
+            path: 'debug_token?' + 'input_token=' + body.user_token + '&access_token=' + this.config['facebook_app_token'],
+            method: 'POST'
+        };
+
+        return Lawn.request(options).then(function (response) {
+            console.log('facebook-check', response);
+        });
+    };
+
+    Lawn.request = function (options, data) {
+        if (typeof data === "undefined") { data = null; }
+        var def = when.defer();
+        var http = require('http');
+
+        var req = http.request(options, function (res) {
+            if (res.statusCode != '200') {
+                res.setEncoding('utf8');
+                res.on('data', function (chunk) {
+                    console.log('client received an error:', res.statusCode, chunk);
+                    def.reject();
                 });
+            } else {
+                res.on('data', function (data) {
+                    res.content = JSON.parse(data);
+                    def.resolve(res);
+                });
+            }
+        });
+
+        if (data)
+            req.write(JSON.stringify(data));
+
+        req.end();
+
+        req.on('error', function (e) {
+            console.log('problem with request: ' + e.message);
+            def.reject();
+        });
+
+        return def.promise;
+    };
+
+    Lawn.prototype.facebook_login = function (req, res, body) {
+        var _this = this;
+        console.log('facebook-login', body);
+        var mysql = require('mysql');
+
+        return this.get_facebook_user(body).then(function (user) {
+            if (!user) {
+                throw new Lawn.HttpError('Invalid login info.', 400);
+            }
+
+            _this.create_session(user, req).then(function () {
+                return Lawn.send_http_login_success(req, res, user);
             });
         });
     };
@@ -200,13 +275,12 @@ var Lawn = (function (_super) {
     };
 
     Lawn.process_public_http = function (req, res, action) {
-        try  {
-            action(req, res);
-        } catch (error) {
+        action(req, res).done(function () {
+        }, function (error) {
             var status = error.status || 500;
             var message = status == 500 ? 'Server Error' : error.message;
             res.json(status || 500, { message: message });
-        }
+        });
     };
 
     Lawn.listen_public_http = function (app, path, action, method) {

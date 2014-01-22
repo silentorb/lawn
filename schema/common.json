@@ -1,0 +1,178 @@
+{
+  "tables": {
+    "roles_users": {
+      "primary_keys": [ "user", "role" ],
+      "properties": {
+        "user": {
+          "type": "int"
+        },
+        "role": {
+          "type": "int"
+        }
+      }
+    }
+  },
+  "trellises": {
+    "resource": {
+      "primary_key": "guid",
+      "properties": {
+        "guid": {
+          "type": "guid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "author": {
+          "type": "reference",
+          "trellis": "user",
+          "insert": "author",
+          "readonly": true
+        },
+        "type": {
+          "type": "string",
+          "readonly": true,
+          "insert": "trellis"
+        },
+        "created": {
+          "type": "created",
+          "readonly": true
+        },
+        "modified": {
+          "type": "modified",
+          "readonly": true
+        }
+      }
+    },
+    "file": {
+      "primary_key": "guid",
+      "properties": {
+        "guid": {
+          "type": "guid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "type": "int"
+        },
+        "author": {
+          "type": "reference",
+          "trellis": "user",
+          "insert": "author"
+        },
+        "timestamp": {
+          "type": "created"
+        },
+        "extension": {
+          "type": "string"
+        },
+        "status": {
+          "type": "int",
+          "default": 0
+        }
+      }
+    },
+    "user": {
+      "primary_key": "id",
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "name": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "private": true
+        },
+        "email": {
+          "type": "string"
+        },
+        "created": {
+          "type": "created",
+          "readonly": true
+        },
+        "modified": {
+          "type": "modified",
+          "readonly": true
+        },
+        "roles": {
+          "type": "list",
+          "trellis": "role"
+        },
+        "online": {
+          "type": "bool",
+          "is_virtual": "true"
+        },
+        "facebook_id": {
+          "type": "unsigned bigint"
+        }
+      }
+    },
+    "role": {
+      "primary_key": "id",
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "name": {
+          "type": "string"
+        },
+        "users": {
+          "type": "list",
+          "trellis": "user"
+        }
+      }
+    },
+    "session": {
+      "primary_key": "token",
+      "properties": {
+        "token": {
+          "type": "string"
+        },
+        "user": {
+          "type": "reference",
+          "trellis": "user"
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "int"
+        },
+        "cache": {
+          "type": "int"
+        },
+        "session": {
+          "type": "text"
+        }
+      }
+    },
+    "update_log": {
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "user": {
+          "type": "reference",
+          "trellis": "user"
+        },
+        "data": {
+          "type": "text"
+        },
+        "trellis": {
+          "type": "string"
+        },
+        "created": {
+          "type": "created"
+        },
+        "modified": {
+          "type": "modified"
+        }
+      }
+    }
+  }
+}

@@ -163,37 +163,50 @@ class Lawn extends Vineyard.Bulb {
     })
   }
 
-  get_facebook_user(body) {
+  get_facebook_user(body):Promise {
     if (typeof body.user_token != 'string' && typeof body.user_token != 'number')
       throw new Lawn.HttpError('Requires either valid facebook user id or email address.', 400)
 
     var options = {
       host: 'graph.facebook.com',
-      path: 'debug_token?'
-        + 'input_token=' + body.user_token
-        + '&access_token=' + this.config['facebook_app_token'],
-      method: 'POST'
+      path: '/oauth/access_token?'
+        + 'client_id=' + this.config['facebook_app'].id
+        + '&client_secret=' + this.config['facebook_app'].secret
+        + '&grant_type=client_credentials',
+      method: 'GET'
     }
 
-    return Lawn.request(options)
+    return Lawn.request(options, null, true)
       .then((response) => {
-        console.log('facebook-check', response)
+        var url = require('url')
+        var info = url.parse('temp.com?' + response.content, true)
+        var access_token = info.query.access_token
+
+        var post = {
+          host: 'graph.facebook.com',
+          path: '/debug_token?'
+            + 'input_token=' + body.user_token
+            + '&access_token=' + access_token,
+          method: 'GET'
+        }
+
+        return Lawn.request(post, null, true)
       })
-
-//    return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [body.facebook_user_id])
-//      .then((user)=> {
-//
-//      })
-
+      .then((response) => {
+//        console.log('facebook-check', response.content)
+        return response.content.data.user_id
+      })
   }
 
-  static request(options, data = null):Promise {
+  static request(options, data = null, secure = false):Promise {
     var def = when.defer()
-    var http = require('http')
+    var http = require(secure ? 'https' : 'http')
+//    if (secure)
+//      options.secureProtocol = 'SSLv3_method'
 
     var req = http.request(options, function (res) {
+      res.setEncoding('utf8')
       if (res.statusCode != '200') {
-        res.setEncoding('utf8')
         res.on('data', function (chunk) {
           console.log('client received an error:', res.statusCode, chunk)
           def.reject()
@@ -201,7 +214,13 @@ class Lawn extends Vineyard.Bulb {
       }
       else {
         res.on('data', function (data) {
-          res.content = JSON.parse(data)
+          if (res.headers['content-type'] &&
+            (res.headers['content-type'].indexOf('json') > -1
+              || res.headers['content-type'].indexOf('javascript') > -1))
+            res.content = JSON.parse(data)
+          else
+            res.content = data
+
           def.resolve(res)
         })
       }
@@ -220,17 +239,41 @@ class Lawn extends Vineyard.Bulb {
     return def.promise
   }
 
+  // success resolves a new user object.
+  create_facebook_user(facebook_id, name, email):Promise {
+    var user = {
+      name: name,
+      email: email
+    }
+    console.log('user', user)
+    this.ground.create_update('user', user).run()
+      .then((user)=> {
+        res.send({
+          message: 'User ' + name + ' created successfully.',
+          user: user
+        });
+      })
+  }
+
   facebook_login(req, res, body):Promise {
     console.log('facebook-login', body)
     var mysql = require('mysql')
 
     return this.get_facebook_user(body)
-      .then((user)=> {
-        if (!user) {
-          throw new Lawn.HttpError('Invalid login info.', 400)
+      .then((facebook_id)=> {
+        console.log('fb-user', facebook_id)
+        if (!facebook_id) {
+          throw new Lawn.HttpError('Invalid facebook login info.', 400)
         }
 
-        this.create_session(user, req)
+        return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
+      })
+      .then((user)=> {
+        if (!user) {
+
+        }
+
+        return this.create_session(user, req)
           .then(()=> Lawn.send_http_login_success(req, res, user))
       })
   }
@@ -288,6 +331,7 @@ class Lawn extends Vineyard.Bulb {
     action(req, res)
       .done(()=> {
       }, (error)=> {
+        error = error || {}
         var status = error.status || 500
         var message = status == 500 ? 'Server Error' : error.message
         res.json(status || 500, { message: message })

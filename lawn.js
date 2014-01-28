@@ -1,4 +1,4 @@
-var MetaHub = require('metahub');var Ground = require('ground');var Vineyard = require('vineyard');var when = require('when');var __extends = this.__extends || function (d, b) {
+var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
@@ -167,30 +167,47 @@ var Lawn = (function (_super) {
 
         var options = {
             host: 'graph.facebook.com',
-            path: 'debug_token?' + 'input_token=' + body.user_token + '&access_token=' + this.config['facebook_app_token'],
-            method: 'POST'
+            path: '/oauth/access_token?' + 'client_id=' + this.config['facebook_app'].id + '&client_secret=' + this.config['facebook_app'].secret + '&grant_type=client_credentials',
+            method: 'GET'
         };
 
-        return Lawn.request(options).then(function (response) {
-            console.log('facebook-check', response);
+        return Lawn.request(options, null, true).then(function (response) {
+            var url = require('url');
+            var info = url.parse('temp.com?' + response.content, true);
+            var access_token = info.query.access_token;
+
+            var post = {
+                host: 'graph.facebook.com',
+                path: '/debug_token?' + 'input_token=' + body.user_token + '&access_token=' + access_token,
+                method: 'GET'
+            };
+
+            return Lawn.request(post, null, true);
+        }).then(function (response) {
+            return response.content.data.user_id;
         });
     };
 
-    Lawn.request = function (options, data) {
+    Lawn.request = function (options, data, secure) {
         if (typeof data === "undefined") { data = null; }
+        if (typeof secure === "undefined") { secure = false; }
         var def = when.defer();
-        var http = require('http');
+        var http = require(secure ? 'https' : 'http');
 
         var req = http.request(options, function (res) {
+            res.setEncoding('utf8');
             if (res.statusCode != '200') {
-                res.setEncoding('utf8');
                 res.on('data', function (chunk) {
                     console.log('client received an error:', res.statusCode, chunk);
                     def.reject();
                 });
             } else {
                 res.on('data', function (data) {
-                    res.content = JSON.parse(data);
+                    if (res.headers['content-type'] && (res.headers['content-type'].indexOf('json') > -1 || res.headers['content-type'].indexOf('javascript') > -1))
+                        res.content = JSON.parse(data);
+                    else
+                        res.content = data;
+
                     def.resolve(res);
                 });
             }
@@ -209,17 +226,37 @@ var Lawn = (function (_super) {
         return def.promise;
     };
 
+    Lawn.prototype.create_facebook_user = function (facebook_id, name, email) {
+        var user = {
+            name: name,
+            email: email
+        };
+        console.log('user', user);
+        this.ground.create_update('user', user).run().then(function (user) {
+            res.send({
+                message: 'User ' + name + ' created successfully.',
+                user: user
+            });
+        });
+    };
+
     Lawn.prototype.facebook_login = function (req, res, body) {
         var _this = this;
         console.log('facebook-login', body);
         var mysql = require('mysql');
 
-        return this.get_facebook_user(body).then(function (user) {
-            if (!user) {
-                throw new Lawn.HttpError('Invalid login info.', 400);
+        return this.get_facebook_user(body).then(function (facebook_id) {
+            console.log('fb-user', facebook_id);
+            if (!facebook_id) {
+                throw new Lawn.HttpError('Invalid facebook login info.', 400);
             }
 
-            _this.create_session(user, req).then(function () {
+            return _this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id]);
+        }).then(function (user) {
+            if (!user) {
+            }
+
+            return _this.create_session(user, req).then(function () {
                 return Lawn.send_http_login_success(req, res, user);
             });
         });
@@ -277,6 +314,7 @@ var Lawn = (function (_super) {
     Lawn.process_public_http = function (req, res, action) {
         action(req, res).done(function () {
         }, function (error) {
+            error = error || {};
             var status = error.status || 500;
             var message = status == 500 ? 'Server Error' : error.message;
             res.json(status || 500, { message: message });
@@ -612,6 +650,3 @@ var Lawn;
     Lawn.Irrigation = Irrigation;
 })(Lawn || (Lawn = {}));
 //# sourceMappingURL=lawn.js.map
-module.exports = Lawn
-var Irrigation = Lawn.Irrigation
-require('source-map-support').install();

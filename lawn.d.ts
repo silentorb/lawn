@@ -23,12 +23,10 @@ declare class Lawn extends Vineyard.Bulb {
     public query_user(user: any, query: Ground.Query_Builder): void;
     public start(): void;
     public get_user_from_session(token: string): Promise;
-    public http_login(req: any, res: any, body: any): void;
-    public create_session(user: any, req: any): Promise;
+    public http_login(req: any, res: any, body: any): Promise;
+    static create_session(user: any, req: any, ground: any): Promise;
     static send_http_login_success(req: any, res: any, user: any): void;
-    public get_facebook_user(body: any): Promise;
     static request(options: any, data?: any, secure?: boolean): Promise;
-    public facebook_login(req: any, res: any, body: any): Promise;
     public login(data: any, socket: ISocket, callback: any): {};
     public on_connection(socket: ISocket): Socket;
     static process_public_http(req: any, res: any, action: any): void;
@@ -71,6 +69,14 @@ declare module Lawn {
         static process(method: string, request: Ground.External_Query_Source, user: Vineyard.IUser, vineyard: Vineyard, socket: any, callback: any): Promise;
         static query(request: Ground.External_Query_Source, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
         static update(request: Update_Request, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
+    }
+    class Facebook extends Vineyard.Bulb {
+        public lawn: Lawn;
+        public grow(): void;
+        public create_user(facebook_id: any, source: any, user_id: any): Promise;
+        public login(req: any, res: any, body: any): Promise;
+        public get_user(body: any): Promise;
+        public get_user_facebook_id(body: any): Promise;
     }
 }
 declare module "lawn" {

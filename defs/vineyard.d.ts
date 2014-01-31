@@ -1,6 +1,11 @@
 /// <reference path="node.d.ts" />
 /// <reference path="metahub.d.ts" />
 /// <reference path="ground.d.ts" />
+interface Bulb_Configuration {
+    path?: string;
+    class?: string;
+    parent?: string;
+}
 declare class Vineyard {
     public bulbs: any;
     public config: any;

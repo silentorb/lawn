@@ -120,22 +120,26 @@ class Lawn extends Vineyard.Bulb {
       })
   }
 
-  http_login(req, res, body) {
+  http_login(req, res, body):Promise {
+
+    if (typeof body.facebook_token === 'string')
+      return this.vineyard.bulbs.facebook.login(req, res, body)
+
     console.log('login', body)
     var mysql = require('mysql')
-    this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass])
+    this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass])
       .then((rows)=> {
         if (rows.length == 0) {
           throw new Lawn.HttpError('Invalid login info.', 400)
         }
 
         var user = rows[0];
-        return this.create_session(user, req)
+        return Lawn.create_session(user, req, this.ground)
           .then(()=> Lawn.send_http_login_success(req, res, user))
       })
   }
 
-  create_session(user, req):Promise {
+  static create_session(user, req, ground):Promise {
     var ip = req.headers['x-forwarded-for'] ||
       req.connection.remoteAddress ||
       req.socket.remoteAddress ||
@@ -148,7 +152,7 @@ class Lawn extends Vineyard.Bulb {
       Math.round(new Date().getTime() / 1000)
     ]
 
-    return this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
+    return ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
       .then(() => session)
   }
 
@@ -161,41 +165,6 @@ class Lawn extends Vineyard.Bulb {
         name: user.name
       }
     })
-  }
-
-  get_facebook_user(body):Promise {
-    if (typeof body.user_token != 'string' && typeof body.user_token != 'number')
-      throw new Lawn.HttpError('Requires either valid facebook user id or email address.', 400)
-
-    var options = {
-      host: 'graph.facebook.com',
-      path: '/oauth/access_token?'
-        + 'client_id=' + this.config['facebook_app'].id
-        + '&client_secret=' + this.config['facebook_app'].secret
-        + '&grant_type=client_credentials',
-      method: 'GET'
-    }
-
-    return Lawn.request(options, null, true)
-      .then((response) => {
-        var url = require('url')
-        var info = url.parse('temp.com?' + response.content, true)
-        var access_token = info.query.access_token
-
-        var post = {
-          host: 'graph.facebook.com',
-          path: '/debug_token?'
-            + 'input_token=' + body.user_token
-            + '&access_token=' + access_token,
-          method: 'GET'
-        }
-
-        return Lawn.request(post, null, true)
-      })
-      .then((response) => {
-//        console.log('facebook-check', response.content)
-        return response.content.data.user_id
-      })
   }
 
   static request(options, data = null, secure = false):Promise {
@@ -237,45 +206,6 @@ class Lawn extends Vineyard.Bulb {
     })
 
     return def.promise
-  }
-
-  // success resolves a new user object.
-  create_facebook_user(facebook_id, name, email):Promise {
-    var user = {
-      name: name,
-      email: email
-    }
-    console.log('user', user)
-    this.ground.create_update('user', user).run()
-      .then((user)=> {
-        res.send({
-          message: 'User ' + name + ' created successfully.',
-          user: user
-        });
-      })
-  }
-
-  facebook_login(req, res, body):Promise {
-    console.log('facebook-login', body)
-    var mysql = require('mysql')
-
-    return this.get_facebook_user(body)
-      .then((facebook_id)=> {
-        console.log('fb-user', facebook_id)
-        if (!facebook_id) {
-          throw new Lawn.HttpError('Invalid facebook login info.', 400)
-        }
-
-        return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
-      })
-      .then((user)=> {
-        if (!user) {
-
-        }
-
-        return this.create_session(user, req)
-          .then(()=> Lawn.send_http_login_success(req, res, user))
-      })
   }
 
   login(data, socket:ISocket, callback) {
@@ -680,6 +610,122 @@ module Lawn {
         })
 
 
+    }
+  }
+
+  export class Facebook extends Vineyard.Bulb {
+    lawn:Lawn
+
+    grow() {
+      this.lawn = this.vineyard.bulbs.lawn
+    }
+
+    create_user(facebook_id,source, user_id):Promise {
+      var user = {
+        name: source.name,
+        username: source.username,
+        email: source.email,
+        gender: source.gender
+      }
+
+      if (user_id)
+        user['id'] = user_id
+
+      console.log('user', user)
+      return this.ground.create_update('user', user).run()
+        .then((user)=> {
+          return {
+            id: user.id,
+            name: user.name,
+            username: user.username
+          }
+//        res.send({
+//          message: 'User ' + name + ' created successfully.',
+//          user: user
+//        });
+        })
+    }
+
+    login(req, res, body):Promise {
+      console.log('facebook-login', body)
+      var mysql = require('mysql')
+
+      return this.get_user(body)
+        .then((user)=> {
+          return Lawn.create_session(user, req, this.ground)
+            .then(()=> Lawn.send_http_login_success(req, res, user))
+        })
+    }
+
+    get_user(body):Promise {
+      return this.get_user_facebook_id(body)
+        .then((facebook_id)=> {
+          console.log('fb-user', facebook_id)
+          if (!facebook_id) {
+            throw new Lawn.HttpError('Invalid facebook login info.', 400)
+          }
+
+          return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
+            .then((user)=> {
+              if (user)
+                return user
+
+              var options = {
+                host: 'graph.facebook.com',
+                path: '/' + facebook_id + '?fields=name,username,gender,picture'
+                  + '&access_token=' + body.facebook_token,
+                method: 'GET'
+              }
+
+              return Lawn.request(options, null, true)
+                .then((response) => {
+                  console.log('fb-user', response.content)
+                  var content = response.content
+                  if (!content.email)
+                    throw new Lawn.HttpError('Could not get Facebook user email. ' +
+                      'This is most likely caused by receiving a Facebook token that lacks email permission.', 400)
+
+                  return this.ground.db.query_single("SELECT id FROM users WHERE email = ?", [content.email])
+                    .then((id)=>
+                      this.create_user(facebook_id, content, id || undefined))
+                })
+            })
+        })
+    }
+
+    get_user_facebook_id(body):Promise {
+      if (typeof body.facebook_token != 'string' && typeof body.facebook_token != 'number')
+        throw new Lawn.HttpError('Requires either valid facebook user id or email address.', 400)
+
+      var options = {
+        host: 'graph.facebook.com',
+        path: '/oauth/access_token?'
+          + 'client_id=' + this.config['app'].id
+          + '&client_secret=' + this.config['app'].secret
+          + '&grant_type=client_credentials',
+        method: 'GET'
+      }
+
+      return Lawn.request(options, null, true)
+        .then((response) => {
+          var url = require('url')
+          var info = url.parse('temp.com?' + response.content, true)
+          var access_token = info.query.access_token
+
+          var post = {
+            host: 'graph.facebook.com',
+            path: '/debug_token?'
+              + 'input_token=' + body.facebook_token
+              + '&access_token=' + access_token,
+            method: 'GET'
+          }
+
+          return Lawn.request(post, null, true)
+        })
+        .then((response) => {
+        console.log('facebook-check', response.content)
+          return response.content.data.user_id
+        })
     }
   }
 }

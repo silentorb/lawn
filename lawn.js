@@ -1,4 +1,4 @@
-var __extends = this.__extends || function (d, b) {
+var MetaHub = require('metahub');var Ground = require('ground');var Vineyard = require('vineyard');var when = require('when');var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
@@ -121,21 +121,24 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.http_login = function (req, res, body) {
         var _this = this;
+        if (typeof body.facebook_token === 'string')
+            return this.vineyard.bulbs.facebook.login(req, res, body);
+
         console.log('login', body);
         var mysql = require('mysql');
-        this.ground.db.query("SELECT id, name FROM users WHERE name = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
+        this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
             if (rows.length == 0) {
                 throw new Lawn.HttpError('Invalid login info.', 400);
             }
 
             var user = rows[0];
-            return _this.create_session(user, req).then(function () {
+            return Lawn.create_session(user, req, _this.ground).then(function () {
                 return Lawn.send_http_login_success(req, res, user);
             });
         });
     };
 
-    Lawn.prototype.create_session = function (user, req) {
+    Lawn.create_session = function (user, req, ground) {
         var ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress;
 
         var session = [
@@ -145,7 +148,7 @@ var Lawn = (function (_super) {
             Math.round(new Date().getTime() / 1000)
         ];
 
-        return this.ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session).then(function () {
+        return ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session).then(function () {
             return session;
         });
     };
@@ -158,33 +161,6 @@ var Lawn = (function (_super) {
                 id: user.id,
                 name: user.name
             }
-        });
-    };
-
-    Lawn.prototype.get_facebook_user = function (body) {
-        if (typeof body.user_token != 'string' && typeof body.user_token != 'number')
-            throw new Lawn.HttpError('Requires either valid facebook user id or email address.', 400);
-
-        var options = {
-            host: 'graph.facebook.com',
-            path: '/oauth/access_token?' + 'client_id=' + this.config['facebook_app'].id + '&client_secret=' + this.config['facebook_app'].secret + '&grant_type=client_credentials',
-            method: 'GET'
-        };
-
-        return Lawn.request(options, null, true).then(function (response) {
-            var url = require('url');
-            var info = url.parse('temp.com?' + response.content, true);
-            var access_token = info.query.access_token;
-
-            var post = {
-                host: 'graph.facebook.com',
-                path: '/debug_token?' + 'input_token=' + body.user_token + '&access_token=' + access_token,
-                method: 'GET'
-            };
-
-            return Lawn.request(post, null, true);
-        }).then(function (response) {
-            return response.content.data.user_id;
         });
     };
 
@@ -224,42 +200,6 @@ var Lawn = (function (_super) {
         });
 
         return def.promise;
-    };
-
-    Lawn.prototype.create_facebook_user = function (facebook_id, name, email) {
-        var user = {
-            name: name,
-            email: email
-        };
-        console.log('user', user);
-        this.ground.create_update('user', user).run().then(function (user) {
-            res.send({
-                message: 'User ' + name + ' created successfully.',
-                user: user
-            });
-        });
-    };
-
-    Lawn.prototype.facebook_login = function (req, res, body) {
-        var _this = this;
-        console.log('facebook-login', body);
-        var mysql = require('mysql');
-
-        return this.get_facebook_user(body).then(function (facebook_id) {
-            console.log('fb-user', facebook_id);
-            if (!facebook_id) {
-                throw new Lawn.HttpError('Invalid facebook login info.', 400);
-            }
-
-            return _this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id]);
-        }).then(function (user) {
-            if (!user) {
-            }
-
-            return _this.create_session(user, req).then(function () {
-                return Lawn.send_http_login_success(req, res, user);
-            });
-        });
     };
 
     Lawn.prototype.login = function (data, socket, callback) {
@@ -648,5 +588,113 @@ var Lawn;
         return Irrigation;
     })();
     Lawn.Irrigation = Irrigation;
+
+    var Facebook = (function (_super) {
+        __extends(Facebook, _super);
+        function Facebook() {
+            _super.apply(this, arguments);
+        }
+        Facebook.prototype.grow = function () {
+            this.lawn = this.vineyard.bulbs.lawn;
+        };
+
+        Facebook.prototype.create_user = function (facebook_id, source, user_id) {
+            var user = {
+                name: source.name,
+                username: source.username,
+                email: source.email,
+                gender: source.gender
+            };
+
+            if (user_id)
+                user['id'] = user_id;
+
+            console.log('user', user);
+            return this.ground.create_update('user', user).run().then(function (user) {
+                return {
+                    id: user.id,
+                    name: user.name,
+                    username: user.username
+                };
+            });
+        };
+
+        Facebook.prototype.login = function (req, res, body) {
+            var _this = this;
+            console.log('facebook-login', body);
+            var mysql = require('mysql');
+
+            return this.get_user(body).then(function (user) {
+                return Lawn.create_session(user, req, _this.ground).then(function () {
+                    return Lawn.send_http_login_success(req, res, user);
+                });
+            });
+        };
+
+        Facebook.prototype.get_user = function (body) {
+            var _this = this;
+            return this.get_user_facebook_id(body).then(function (facebook_id) {
+                console.log('fb-user', facebook_id);
+                if (!facebook_id) {
+                    throw new Lawn.HttpError('Invalid facebook login info.', 400);
+                }
+
+                return _this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id]).then(function (user) {
+                    if (user)
+                        return user;
+
+                    var options = {
+                        host: 'graph.facebook.com',
+                        path: '/' + facebook_id + '?fields=name,username,gender,picture' + '&access_token=' + body.facebook_token,
+                        method: 'GET'
+                    };
+
+                    return Lawn.request(options, null, true).then(function (response) {
+                        console.log('fb-user', response.content);
+                        var content = response.content;
+                        if (!content.email)
+                            throw new Lawn.HttpError('Could not get Facebook user email. ' + 'This is most likely caused by receiving a Facebook token that lacks email permission.', 400);
+
+                        return _this.ground.db.query_single("SELECT id FROM users WHERE email = ?", [content.email]).then(function (id) {
+                            return _this.create_user(facebook_id, content, id || undefined);
+                        });
+                    });
+                });
+            });
+        };
+
+        Facebook.prototype.get_user_facebook_id = function (body) {
+            if (typeof body.facebook_token != 'string' && typeof body.facebook_token != 'number')
+                throw new Lawn.HttpError('Requires either valid facebook user id or email address.', 400);
+
+            var options = {
+                host: 'graph.facebook.com',
+                path: '/oauth/access_token?' + 'client_id=' + this.config['app'].id + '&client_secret=' + this.config['app'].secret + '&grant_type=client_credentials',
+                method: 'GET'
+            };
+
+            return Lawn.request(options, null, true).then(function (response) {
+                var url = require('url');
+                var info = url.parse('temp.com?' + response.content, true);
+                var access_token = info.query.access_token;
+
+                var post = {
+                    host: 'graph.facebook.com',
+                    path: '/debug_token?' + 'input_token=' + body.facebook_token + '&access_token=' + access_token,
+                    method: 'GET'
+                };
+
+                return Lawn.request(post, null, true);
+            }).then(function (response) {
+                console.log('facebook-check', response.content);
+                return response.content.data.user_id;
+            });
+        };
+        return Facebook;
+    })(Vineyard.Bulb);
+    Lawn.Facebook = Facebook;
 })(Lawn || (Lawn = {}));
 //# sourceMappingURL=lawn.js.map
+module.exports = Lawn
+var Irrigation = Lawn.Irrigation
+require('source-map-support').install();

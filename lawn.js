@@ -126,7 +126,7 @@ var Lawn = (function (_super) {
 
         console.log('login', body);
         var mysql = require('mysql');
-        this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
+        return this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
             if (rows.length == 0) {
                 throw new Lawn.HttpError('Invalid login info.', 400);
             }
@@ -380,12 +380,13 @@ var Lawn = (function (_super) {
             app.use(express.logger({ stream: log_file }));
         }
 
-        app.post('/vineyard/login', function (req, res) {
+        Lawn.listen_public_http(app, '/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.body);
         });
-        app.get('/vineyard/login', function (req, res) {
+        Lawn.listen_public_http(app, '/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.query);
-        });
+        }, 'get');
+
         this.listen_user_http('/vineyard/query', function (req, res, user) {
             console.log('server recieved query request.');
             return Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (objects) {

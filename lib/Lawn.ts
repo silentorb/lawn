@@ -127,7 +127,7 @@ class Lawn extends Vineyard.Bulb {
 
     console.log('login', body)
     var mysql = require('mysql')
-    this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass])
+    return this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass])
       .then((rows)=> {
         if (rows.length == 0) {
           throw new Lawn.HttpError('Invalid login info.', 400)
@@ -387,8 +387,10 @@ class Lawn extends Vineyard.Bulb {
       app.use(express.logger({stream: log_file}))
     }
 
-    app.post('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
-    app.get('/vineyard/login', (req, res)=> this.http_login(req, res, req.query))
+    Lawn.listen_public_http(app, '/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
+    Lawn.listen_public_http(app, '/vineyard/login', (req, res)=> this.http_login(req, res, req.query), 'get')
+//    app.post('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
+//    app.get('/vineyard/login', (req, res)=> this.http_login(req, res, req.query))
     this.listen_user_http('/vineyard/query', (req, res, user)=> {
       console.log('server recieved query request.')
       return Irrigation.query(req.body, user, this.ground, this.vineyard)
@@ -620,7 +622,7 @@ module Lawn {
       this.lawn = this.vineyard.bulbs.lawn
     }
 
-    create_user(facebook_id,source, user_id):Promise {
+    create_user(facebook_id, source, user_id):Promise {
       var user = {
         name: source.name,
         username: source.username,
@@ -723,7 +725,7 @@ module Lawn {
           return Lawn.request(post, null, true)
         })
         .then((response) => {
-        console.log('facebook-check', response.content)
+          console.log('facebook-check', response.content)
           return response.content.data.user_id
         })
     }

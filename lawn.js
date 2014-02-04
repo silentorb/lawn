@@ -261,6 +261,25 @@ var Lawn = (function (_super) {
         });
     };
 
+    Lawn.prototype.on_socket = function (socket, event, user, action) {
+        var _this = this;
+        socket.on(event, function (request, callback) {
+            try  {
+                var promise = action(request);
+                if (promise && typeof promise.done == 'function')
+                    promise.done(function (response) {
+                        response = response || {};
+                        response.status = response.status || 200;
+                        callback(response);
+                    }, function (error) {
+                        return callback(_this.process_error(error, user));
+                    });
+            } catch (err) {
+                callback(_this.process_error(err, user));
+            }
+        });
+    };
+
     Lawn.listen_public_http = function (app, path, action, method) {
         if (typeof method === "undefined") { method = 'post'; }
         app[method](path, function (req, res) {
@@ -599,16 +618,14 @@ var Lawn;
             this.lawn = this.vineyard.bulbs.lawn;
         };
 
-        Facebook.prototype.create_user = function (facebook_id, source, user_id) {
+        Facebook.prototype.create_user = function (facebook_id, source) {
             var user = {
                 name: source.name,
                 username: source.username,
                 email: source.email,
-                gender: source.gender
+                gender: source.gender,
+                facebook_id: facebook_id
             };
-
-            if (user_id)
-                user['id'] = user_id;
 
             console.log('user', user);
             return this.ground.create_update('user', user).run().then(function (user) {
@@ -652,13 +669,7 @@ var Lawn;
 
                     return Lawn.request(options, null, true).then(function (response) {
                         console.log('fb-user', response.content);
-                        var content = response.content;
-                        if (!content.email)
-                            throw new Lawn.HttpError('Could not get Facebook user email. ' + 'This is most likely caused by receiving a Facebook token that lacks email permission.', 400);
-
-                        return _this.ground.db.query_single("SELECT id FROM users WHERE email = ?", [content.email]).then(function (id) {
-                            return _this.create_user(facebook_id, content, id || undefined);
-                        });
+                        return _this.create_user(facebook_id, response.content);
                     });
                 });
             });

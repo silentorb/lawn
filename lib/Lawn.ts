@@ -268,6 +268,25 @@ class Lawn extends Vineyard.Bulb {
       })
   }
 
+  on_socket(socket, event, user, action) {
+    socket.on(event, (request, callback)=> {
+      try {
+        var promise = action(request)
+        if (promise && typeof promise.done == 'function')
+          promise.done((response)=> {
+              response = response || {}
+              response.status = response.status || 200
+              callback(response)
+            },
+            (error)=> callback(this.process_error(error, user))
+          )
+      }
+      catch (err) {
+        callback(this.process_error(err, user))
+      }
+    })
+  }
+
   static listen_public_http(app, path, action, method = 'post') {
     app[method](path, (req, res)=>
         Lawn.process_public_http(req, res, action)
@@ -622,16 +641,14 @@ module Lawn {
       this.lawn = this.vineyard.bulbs.lawn
     }
 
-    create_user(facebook_id, source, user_id):Promise {
+    create_user(facebook_id, source):Promise {
       var user = {
         name: source.name,
         username: source.username,
         email: source.email,
-        gender: source.gender
+        gender: source.gender,
+        facebook_id: facebook_id
       }
-
-      if (user_id)
-        user['id'] = user_id
 
       console.log('user', user)
       return this.ground.create_update('user', user).run()
@@ -682,14 +699,7 @@ module Lawn {
               return Lawn.request(options, null, true)
                 .then((response) => {
                   console.log('fb-user', response.content)
-                  var content = response.content
-                  if (!content.email)
-                    throw new Lawn.HttpError('Could not get Facebook user email. ' +
-                      'This is most likely caused by receiving a Facebook token that lacks email permission.', 400)
-
-                  return this.ground.db.query_single("SELECT id FROM users WHERE email = ?", [content.email])
-                    .then((id)=>
-                      this.create_user(facebook_id, content, id || undefined))
+                  return this.create_user(facebook_id, response.content)
                 })
             })
         })

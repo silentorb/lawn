@@ -30,6 +30,7 @@ declare class Lawn extends Vineyard.Bulb {
     public login(data: any, socket: ISocket, callback: any): {};
     public on_connection(socket: ISocket): Socket;
     static process_public_http(req: any, res: any, action: any): void;
+    public on_socket(socket: any, event: any, user: any, action: any): void;
     static listen_public_http(app: any, path: any, action: any, method?: string): void;
     public process_error(error: any, user: any): {
         status: any;
@@ -73,7 +74,7 @@ declare module Lawn {
     class Facebook extends Vineyard.Bulb {
         public lawn: Lawn;
         public grow(): void;
-        public create_user(facebook_id: any, source: any, user_id: any): Promise;
+        public create_user(facebook_id: any, source: any): Promise;
         public login(req: any, res: any, body: any): Promise;
         public get_user(body: any): Promise;
         public get_user_facebook_id(body: any): Promise;

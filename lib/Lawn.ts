@@ -49,22 +49,7 @@ class Lawn extends Vineyard.Bulb {
   }
 
   emit_to_users(users, name, data) {
-    // With all the deferred action going on, this is sometimes getting hit
-    // after the socket server has just shut down, so check if that is the case.
-    if (!this.io)
-      return
-
-    var id, user
-    for (var i = 0; i < users.length; ++i) {
-      user = users[i]
-      if (typeof user == 'object')
-        id = user.id
-      else
-        id = user
-
-      console.log('sending-message', name, id, data)
-      this.io.sockets.in(id).emit(name, data)
-    }
+    this.vineyard.bulbs.songbird.notify(users, name, data)
   }
 
   get_user_socket(id:number):Socket {
@@ -103,6 +88,18 @@ class Lawn extends Vineyard.Bulb {
   start() {
     this.start_http(this.config.ports.http);
     this.start_sockets(this.config.ports.websocket);
+  }
+
+  get_public_user(user):Promise {
+    var id = typeof user == 'object' ? user.id : user
+    var query = this.ground.create_query('user')
+    query.add_key_filter(id)
+    return query.run()
+      .then((user)=> {
+        delete user.password
+        delete user.roles
+        return user
+      })
   }
 
   get_user_from_session(token:string):Promise {
@@ -389,6 +386,35 @@ class Lawn extends Vineyard.Bulb {
     }
   }
 
+  file_download(req, res, user) {
+    var guid = req.params.guid;
+    var ext = req.params.ext;
+    if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/))
+      throw new Lawn.HttpError('Invalid File Name', 400)
+
+    var path = require('path')
+    var filepath = path.join(this.vineyard.root_path, 'files', guid + '.' + ext)
+    console.log(filepath)
+    return Lawn.file_exists(filepath)
+      .then((exists)=> {
+        if (!exists)
+//          throw new Lawn.HttpError('File Not Found', 404)
+          throw new Error('File Not Found2')
+
+        var query = this.ground.create_query('file')
+        query.add_key_filter(req.params.guid)
+        var fortress = this.vineyard.bulbs.fortress
+
+        fortress.query_access(user, query)
+          .then((result)=> {
+            if (result.access)
+              res.sendfile(filepath)
+            else
+              throw new Lawn.HttpError('Access Denied', 403)
+          })
+      })
+  }
+
   private static file_exists(filepath:string):Promise {
     var fs = require('fs'), def = when.defer()
     fs.exists(filepath, (exists)=> {
@@ -463,34 +489,7 @@ class Lawn extends Vineyard.Bulb {
         })
     })
 
-    this.listen_user_http('/file/:guid.:ext', (req, res, user)=> {
-      var guid = req.params.guid;
-      var ext = req.params.ext;
-      if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/))
-        throw new Lawn.HttpError('Invalid File Name', 400)
-
-      var path = require('path')
-      var filepath = path.join(this.vineyard.root_path, 'files', guid + '.' + ext)
-      console.log(filepath)
-      return Lawn.file_exists(filepath)
-        .then((exists)=> {
-          if (!exists)
-//          throw new Lawn.HttpError('File Not Found', 404)
-            throw new Error('File Not Found2')
-
-          var query = this.ground.create_query('file')
-          query.add_key_filter(req.params.guid)
-          var fortress = this.vineyard.bulbs.fortress
-
-          fortress.query_access(user, query)
-            .then((result)=> {
-              if (result.access)
-                res.sendfile(filepath)
-              else
-                throw new Lawn.HttpError('Access Denied', 403)
-            })
-        })
-    }, 'get')
+    this.listen_user_http('/file/:guid.:ext', (req, res, user)=> this.file_download(req, res, user), 'get')
 
     port = port || this.config.ports.http
     console.log('HTTP listening on port ' + port + '.')
@@ -750,6 +749,30 @@ module Lawn {
           console.log('facebook-check', response.content)
           return response.content.data.user_id
         })
+    }
+  }
+
+ export class Songbird extends Vineyard.Bulb {
+    lawn:Lawn
+
+    grow() {
+      this.lawn = this.vineyard.bulbs.lawn
+    }
+
+    notify(users, name, data) {
+      // With all the deferred action going on, this is sometimes getting hit
+      // after the socket server has just shut down, so check if that is the case.
+      if (!this.lawn.io)
+        return
+
+      var users = users.map((x)=> typeof x == 'object' ? x.id : x)
+
+      var id
+      for (var i = 0; i < users.length; ++i) {
+        id = users[i]
+        console.log('sending-message', name, id, data)
+        this.lawn.io.sockets.in(id).emit(name, data)
+      }
     }
   }
 }

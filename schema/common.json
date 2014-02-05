@@ -43,6 +43,35 @@
         }
       }
     },
+    "object": {
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "name": {
+          "type": "string"
+        },
+        "author": {
+          "type": "reference",
+          "trellis": "user",
+          "insert": "author",
+          "readonly": true
+        },
+        "type": {
+          "type": "string",
+          "readonly": true,
+          "insert": "trellis"
+        },
+        "created": {
+          "type": "created",
+          "readonly": true
+        },
+        "modified": {
+          "type": "modified",
+          "readonly": true
+        }
+      }
+    },
     "file": {
       "primary_key": "guid",
       "properties": {
@@ -72,6 +101,37 @@
         "status": {
           "type": "int",
           "default": 0
+        }
+      }
+    },
+    "notification": {
+      "parent": "object",
+      "properties": {
+        "event": {
+          "type": "string"
+        },
+        "data": {
+          "type": "text"
+        },
+        "recipients": {
+          "type": "list",
+          "trellis": "user"
+        }
+      }
+    },
+    "notification_destination": {
+      "primary_key": "id",
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "recipient":{
+          "type":"reference",
+          "trellis":"user"
+        },
+        "received":{
+          "type":"bool",
+          "default":"false"
         }
       }
     },

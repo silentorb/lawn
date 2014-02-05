@@ -23,6 +23,7 @@ declare class Lawn extends Vineyard.Bulb {
     public initialize_session(socket: any, user: any): void;
     public query_user(user: any, query: Ground.Query_Builder): void;
     public start(): void;
+    public get_public_user(user: any): Promise;
     public get_user_from_session(token: string): Promise;
     public http_login(req: any, res: any, body: any): Promise;
     static create_session(user: any, req: any, ground: any): Promise;
@@ -40,6 +41,7 @@ declare class Lawn extends Vineyard.Bulb {
     public process_user_http(req: any, res: any, action: any): void;
     public listen_user_http(path: any, action: any, method?: string): void;
     public start_sockets(port?: any): void;
+    public file_download(req: any, res: any, user: any): Promise;
     private static file_exists(filepath);
     public start_http(port: any): void;
     public stop(): void;
@@ -79,6 +81,11 @@ declare module Lawn {
         public login(req: any, res: any, body: any): Promise;
         public get_user(body: any): Promise;
         public get_user_facebook_id(body: any): Promise;
+    }
+    class Songbird extends Vineyard.Bulb {
+        public lawn: Lawn;
+        public grow(): void;
+        public notify(users: any, name: any, data: any): void;
     }
 }
 declare module "lawn" {

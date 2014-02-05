@@ -49,6 +49,23 @@ var Lawn = (function (_super) {
         console.log(text);
     };
 
+    Lawn.prototype.emit_to_users = function (users, name, data) {
+        if (!this.io)
+            return;
+
+        var id, user;
+        for (var i = 0; i < users.length; ++i) {
+            user = users[i];
+            if (typeof user == 'object')
+                id = user.id;
+            else
+                id = user;
+
+            console.log('sending-message', name, id, data);
+            this.io.sockets.in(id).emit(name, data);
+        }
+    };
+
     Lawn.prototype.get_user_socket = function (id) {
         return this.instance_user_sockets[id];
     };
@@ -70,13 +87,6 @@ var Lawn = (function (_super) {
         this.invoke('socket.add', socket, user);
 
         user.online = true;
-        socket.broadcast.emit('user.changed', { user: user });
-
-        socket.on('disconnect', function () {
-            console.log('emitting disconnect for socket', socket.id);
-            user.online = false;
-            socket.broadcast.emit('user.changed', { user: user });
-        });
 
         console.log(process.pid, 'Logged in: ' + user.id);
     };
@@ -532,7 +542,7 @@ var Lawn;
                 return action(request, user, vineyard.ground, vineyard);
             }).then(function (objects) {
                 if (callback)
-                    callback({ code: 200, 'message': 'Success', objects: objects });
+                    callback({ status: 200, 'message': 'Success', objects: objects });
                 else if (method != 'update')
                     socket.emit('error', {
                         status: 400,

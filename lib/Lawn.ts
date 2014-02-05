@@ -48,6 +48,25 @@ class Lawn extends Vineyard.Bulb {
 //      return this.ground.db.query("INSERT INTO debug (source, message, time) VALUES ('server', '" + text + "', " + time + ")");
   }
 
+  emit_to_users(users, name, data) {
+    // With all the deferred action going on, this is sometimes getting hit
+    // after the socket server has just shut down, so check if that is the case.
+    if (!this.io)
+      return
+
+    var id, user
+    for (var i = 0; i < users.length; ++i) {
+      user = users[i]
+      if (typeof user == 'object')
+        id = user.id
+      else
+        id = user
+
+      console.log('sending-message', name, id, data)
+      this.io.sockets.in(id).emit(name, data)
+    }
+  }
+
   get_user_socket(id:number):Socket {
     return this.instance_user_sockets[id]
   }
@@ -68,13 +87,6 @@ class Lawn extends Vineyard.Bulb {
     this.invoke('socket.add', socket, user)
 
     user.online = true
-    socket.broadcast.emit('user.changed', { user: user })
-
-    socket.on('disconnect', ()=> {
-      console.log('emitting disconnect for socket', socket.id)
-      user.online = false
-      socket.broadcast.emit('user.changed', { user: user })
-    })
 
     console.log(process.pid, 'Logged in: ' + user.id)
   }
@@ -552,7 +564,7 @@ module Lawn {
         .then(()=> action(request, user, vineyard.ground, vineyard))
         .then((objects)=> {
           if (callback)
-            callback({ code: 200, 'message': 'Success', objects: objects })
+            callback({ status: 200, 'message': 'Success', objects: objects })
           else if (method != 'update')
             socket.emit('error', {
               status: 400,

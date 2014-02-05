@@ -18,6 +18,7 @@ declare class Lawn extends Vineyard.Bulb {
     public grow(): void;
     static authorization(handshakeData: any, callback: any): any;
     public debug(...args: any[]): void;
+    public emit_to_users(users: any, name: any, data: any): void;
     public get_user_socket(id: number): Socket;
     public initialize_session(socket: any, user: any): void;
     public query_user(user: any, query: Ground.Query_Builder): void;

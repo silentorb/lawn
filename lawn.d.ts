@@ -23,6 +23,11 @@ declare class Lawn extends Vineyard.Bulb {
     public initialize_session(socket: any, user: any): void;
     public query_user(user: any, query: Ground.Query_Builder): void;
     public start(): void;
+    static public_user_properties: string[];
+    static internal_user_properties: string[];
+    private static is_ready_user_object(user);
+    private static format_public_user(user);
+    private static format_internal_user(user);
     public get_public_user(user: any): Promise;
     public get_user_from_session(token: string): Promise;
     public http_login(req: any, res: any, body: any): Promise;
@@ -53,6 +58,7 @@ declare module Lawn {
         use_redis?: boolean;
         cookie_secret?: string;
         log_file?: string;
+        admin: any;
     }
     interface Update_Request {
         objects: any[];
@@ -85,7 +91,10 @@ declare module Lawn {
     class Songbird extends Vineyard.Bulb {
         public lawn: Lawn;
         public grow(): void;
-        public notify(users: any, name: any, data: any): void;
+        public initialize_socket(socket: any, user: any): void;
+        public notify(users: any, name: any, data: any, store?: boolean): void;
+        public notification_receieved(user: any, request: any): Promise;
+        public send_pending_notifications(user: any): void;
     }
 }
 declare module "lawn" {

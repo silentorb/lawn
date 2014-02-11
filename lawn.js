@@ -75,6 +75,7 @@ var Lawn = (function (_super) {
 
         user.online = true;
 
+        this.vineyard.bulbs.songbird.send_pending_notifications(user);
         console.log(process.pid, 'Logged in: ' + user.id);
     };
 
@@ -91,14 +92,36 @@ var Lawn = (function (_super) {
         this.start_sockets(this.config.ports.websocket);
     };
 
+    Lawn.is_ready_user_object = function (user) {
+        var properties = Lawn.public_user_properties;
+        for (var i = 0; i < properties.length; ++i) {
+            if (user[properties[i]] === undefined)
+                return false;
+        }
+
+        return true;
+    };
+
+    Lawn.format_public_user = function (user) {
+        return MetaHub.extend({}, user, Lawn.public_user_properties);
+    };
+
+    Lawn.format_internal_user = function (user) {
+        return MetaHub.extend({}, user, Lawn.internal_user_properties);
+    };
+
     Lawn.prototype.get_public_user = function (user) {
+        if (typeof user == 'object') {
+            if (Lawn.is_ready_user_object(user)) {
+                return Lawn.format_public_user(user);
+            }
+        }
+
         var id = typeof user == 'object' ? user.id : user;
         var query = this.ground.create_query('user');
         query.add_key_filter(id);
         return query.run().then(function (user) {
-            delete user.password;
-            delete user.roles;
-            return user;
+            return Lawn.format_public_user(user);
         });
     };
 
@@ -119,11 +142,8 @@ var Lawn = (function (_super) {
                 throw new Lawn.HttpError('User not found.', 400);
 
             var user = session.user;
-            return {
-                id: user.id,
-                name: user.name,
-                roles: user.roles
-            };
+
+            return Lawn.format_internal_user(user);
         });
     };
 
@@ -390,7 +410,7 @@ var Lawn = (function (_super) {
         console.log(filepath);
         return Lawn.file_exists(filepath).then(function (exists) {
             if (!exists)
-                throw new Error('File Not Found2');
+                throw new Lawn.HttpError('File Not Found', 404);
 
             var query = _this.ground.create_query('file');
             query.add_key_filter(req.params.guid);
@@ -509,6 +529,8 @@ var Lawn = (function (_super) {
             this.app = null;
         }
     };
+    Lawn.public_user_properties = ['id', 'name', 'username', 'email'];
+    Lawn.internal_user_properties = Lawn.public_user_properties.concat(['roles']);
     return Lawn;
 })(Vineyard.Bulb);
 
@@ -674,16 +696,7 @@ var Lawn;
                     if (user)
                         return user;
 
-                    var options = {
-                        host: 'graph.facebook.com',
-                        path: '/' + facebook_id + '?fields=name,username,gender,picture' + '&access_token=' + body.facebook_token,
-                        method: 'GET'
-                    };
-
-                    return Lawn.request(options, null, true).then(function (response) {
-                        console.log('fb-user', response.content);
-                        return _this.create_user(facebook_id, response.content);
-                    });
+                    return { status: 300, message: 'That Facebook user id is not yet connect to an account.  Redirect to registration.' };
                 });
             });
         };
@@ -725,23 +738,94 @@ var Lawn;
             _super.apply(this, arguments);
         }
         Songbird.prototype.grow = function () {
+            var _this = this;
             this.lawn = this.vineyard.bulbs.lawn;
+            this.listen(this.lawn, 'socket.add', function (socket, user) {
+                return _this.initialize_socket(socket, user);
+            });
         };
 
-        Songbird.prototype.notify = function (users, name, data) {
-            if (!this.lawn.io)
-                return;
+        Songbird.prototype.initialize_socket = function (socket, user) {
+            var _this = this;
+            this.lawn.on_socket(socket, 'notification/received', user, function (request) {
+                return _this.notification_receieved(user, request);
+            });
+        };
 
+        Songbird.prototype.notify = function (users, name, data, store) {
+            if (typeof store === "undefined") { store = true; }
+            var _this = this;
+            var ground = this.lawn.ground;
             var users = users.map(function (x) {
                 return typeof x == 'object' ? x.id : x;
             });
 
-            var id;
-            for (var i = 0; i < users.length; ++i) {
-                id = users[i];
-                console.log('sending-message', name, id, data);
-                this.lawn.io.sockets.in(id).emit(name, data);
+            if (!store) {
+                if (!this.lawn.io)
+                    return;
+
+                for (var i = 0; i < users.length; ++i) {
+                    var id = users[i];
+                    console.log('sending-message', name, id, data);
+                    this.lawn.io.sockets.in(id).emit(name, data);
+                }
             }
+
+            ground.create_update('notification', {
+                event: name,
+                data: JSON.stringify(data)
+            }, this.lawn.config.admin).run().done(function (notification) {
+                for (var i = 0; i < users.length; ++i) {
+                    var id = users[i];
+                    console.log('sending-message', name, id, data);
+
+                    var online = _this.lawn.io && _this.lawn.io.sockets.clients(id) ? true : false;
+
+                    ground.create_update('notification_target', {
+                        notification: notification,
+                        recipient: id,
+                        received: online
+                    }, _this.lawn.config.admin).run();
+
+                    if (_this.lawn.io)
+                        _this.lawn.io.sockets.in(id).emit(name, data);
+                }
+            });
+        };
+
+        Songbird.prototype.notification_receieved = function (user, request) {
+            var ground = this.lawn.ground;
+            var query = ground.create_query('notification_target');
+            query.add_filter('recipient', user);
+            query.add_filter('notification', request.notification);
+            return query.run_single().then(function (object) {
+                if (!object)
+                    throw new Lawn.HttpError('Could not find a notification with that id and target user.', 400);
+
+                if (object.received)
+                    throw new Lawn.HttpError('That notification was already marked as received.', 400);
+
+                return ground.update_object('notification_target', {
+                    id: object.id,
+                    received: true
+                }).then(function (object) {
+                    return { message: "Notification is now marked as received." };
+                });
+            });
+        };
+
+        Songbird.prototype.send_pending_notifications = function (user) {
+            var _this = this;
+            var ground = this.lawn.ground;
+            var query = ground.create_query('notification_target');
+            query.add_filter('recipient', user);
+            query.add_filter('received', false);
+            query.run().done(function (objects) {
+                for (var i = 0; i < objects.length; ++i) {
+                    var notification = objects[i].notification;
+                    _this.lawn.io.sockets.in(user.id).emit(notification.event, notification.data);
+                }
+            });
         };
         return Songbird;
     })(Vineyard.Bulb);

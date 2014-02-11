@@ -113,17 +113,21 @@
         "data": {
           "type": "text"
         },
-        "recipients": {
+        "targets": {
           "type": "list",
-          "trellis": "user"
+          "trellis": "notification_target"
         }
       }
     },
-    "notification_destination": {
+    "notification_target": {
       "primary_key": "id",
       "properties": {
         "id": {
           "type": "int"
+        },
+        "notification": {
+          "type":"reference",
+          "trellis":"notification"
         },
         "recipient":{
           "type":"reference",
@@ -152,26 +156,35 @@
           "private": true
         },
         "email": {
-          "type": "string"
+          "type": "string",
+          "private": true
         },
         "created": {
           "type": "created",
-          "readonly": true
+          "readonly": true,
+          "private": true
         },
         "modified": {
           "type": "modified",
-          "readonly": true
+          "readonly": true,
+          "private": true
         },
         "roles": {
           "type": "list",
-          "trellis": "role"
+          "trellis": "role",
+          "private": true
         },
         "online": {
           "type": "bool",
           "is_virtual": "true"
         },
         "facebook_id": {
-          "type": "unsigned bigint"
+          "type": "unsigned bigint",
+          "private": true
+        },
+        "phone": {
+          "type": "string",
+          "private": true
         }
       }
     },

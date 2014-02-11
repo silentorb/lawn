@@ -73,6 +73,7 @@ class Lawn extends Vineyard.Bulb {
 
     user.online = true
 
+    this.vineyard.bulbs.songbird.send_pending_notifications(user)
     console.log(process.pid, 'Logged in: ' + user.id)
   }
 
@@ -90,16 +91,39 @@ class Lawn extends Vineyard.Bulb {
     this.start_sockets(this.config.ports.websocket);
   }
 
+  static public_user_properties = [ 'id', 'name', 'username', 'email' ]
+  static internal_user_properties = Lawn.public_user_properties.concat([ 'roles' ])
+
+  private static is_ready_user_object(user) {
+    var properties = Lawn.public_user_properties
+    for (var i = 0; i < properties.length; ++i) {
+      if (user[properties[i]] === undefined)
+        return false
+    }
+
+    return true
+  }
+
+  private static format_public_user(user) {
+    return MetaHub.extend({}, user, Lawn.public_user_properties)
+  }
+
+  private static format_internal_user(user) {
+    return MetaHub.extend({}, user, Lawn.internal_user_properties)
+  }
+
   get_public_user(user):Promise {
+    if (typeof user == 'object') {
+      if (Lawn.is_ready_user_object(user)) {
+        return Lawn.format_public_user(user)
+      }
+    }
+
     var id = typeof user == 'object' ? user.id : user
     var query = this.ground.create_query('user')
     query.add_key_filter(id)
     return query.run()
-      .then((user)=> {
-        delete user.password
-        delete user.roles
-        return user
-      })
+      .then((user)=> Lawn.format_public_user(user))
   }
 
   get_user_from_session(token:string):Promise {
@@ -108,7 +132,6 @@ class Lawn extends Vineyard.Bulb {
     query.add_subquery('user').add_subquery('roles')
 
     return query.run_single()
-//      .then(()=> { throw new Error('Debug error') })
       .then((session) => {
         console.log('session', session)
         if (!session)
@@ -121,11 +144,8 @@ class Lawn extends Vineyard.Bulb {
           throw new Lawn.HttpError('User not found.', 400)
 
         var user = session.user
-        return {
-          id: user.id,
-          name: user.name,
-          roles: user.roles
-        }
+
+        return Lawn.format_internal_user(user)
       })
   }
 
@@ -398,8 +418,8 @@ class Lawn extends Vineyard.Bulb {
     return Lawn.file_exists(filepath)
       .then((exists)=> {
         if (!exists)
-//          throw new Lawn.HttpError('File Not Found', 404)
-          throw new Error('File Not Found2')
+          throw new Lawn.HttpError('File Not Found', 404)
+//          throw new Error('File Not Found')
 
         var query = this.ground.create_query('file')
         query.add_key_filter(req.params.guid)
@@ -527,6 +547,7 @@ module Lawn {
     use_redis?:boolean
     cookie_secret?:string
     log_file?:string
+    admin
   }
 
   export interface Update_Request {
@@ -669,10 +690,6 @@ module Lawn {
             name: user.name,
             username: user.username
           }
-//        res.send({
-//          message: 'User ' + name + ' created successfully.',
-//          user: user
-//        });
         })
     }
 
@@ -700,18 +717,20 @@ module Lawn {
               if (user)
                 return user
 
-              var options = {
-                host: 'graph.facebook.com',
-                path: '/' + facebook_id + '?fields=name,username,gender,picture'
-                  + '&access_token=' + body.facebook_token,
-                method: 'GET'
-              }
+              return { status: 300, message: 'That Facebook user id is not yet connect to an account.  Redirect to registration.' }
 
-              return Lawn.request(options, null, true)
-                .then((response) => {
-                  console.log('fb-user', response.content)
-                  return this.create_user(facebook_id, response.content)
-                })
+//              var options = {
+//                host: 'graph.facebook.com',
+//                path: '/' + facebook_id + '?fields=name,username,gender,picture'
+//                  + '&access_token=' + body.facebook_token,
+//                method: 'GET'
+//              }
+//
+//              return Lawn.request(options, null, true)
+//                .then((response) => {
+//                  console.log('fb-user', response.content)
+//                  return this.create_user(facebook_id, response.content)
+//                })
             })
         })
     }
@@ -752,27 +771,95 @@ module Lawn {
     }
   }
 
- export class Songbird extends Vineyard.Bulb {
+  export class Songbird extends Vineyard.Bulb {
     lawn:Lawn
 
     grow() {
       this.lawn = this.vineyard.bulbs.lawn
+      this.listen(this.lawn, 'socket.add', (socket, user)=> this.initialize_socket(socket, user))
     }
 
-    notify(users, name, data) {
+    initialize_socket(socket, user) {
+      this.lawn.on_socket(socket, 'notification/received', user, (request)=>
+        this.notification_receieved(user, request))
+    }
+
+    notify(users, name, data, store = true) {
       // With all the deferred action going on, this is sometimes getting hit
       // after the socket server has just shut down, so check if that is the case.
-      if (!this.lawn.io)
-        return
 
+      var ground = this.lawn.ground
       var users = users.map((x)=> typeof x == 'object' ? x.id : x)
 
-      var id
-      for (var i = 0; i < users.length; ++i) {
-        id = users[i]
-        console.log('sending-message', name, id, data)
-        this.lawn.io.sockets.in(id).emit(name, data)
+      if (!store) {
+        if (!this.lawn.io)
+          return
+
+        for (var i = 0; i < users.length; ++i) {
+          var id = users[i]
+          console.log('sending-message', name, id, data)
+          this.lawn.io.sockets.in(id).emit(name, data)
+        }
       }
+
+      ground.create_update('notification', {
+        event: name,
+        data: JSON.stringify(data)
+      }, this.lawn.config.admin).run()
+        .done((notification)=> {
+          for (var i = 0; i < users.length; ++i) {
+            var id = users[i]
+            console.log('sending-message', name, id, data)
+
+            var online = this.lawn.io && this.lawn.io.sockets.clients(id) ? true : false
+
+            ground.create_update('notification_target', {
+              notification: notification,
+              recipient: id,
+              received: online
+            }, this.lawn.config.admin).run()
+
+            if (this.lawn.io)
+              this.lawn.io.sockets.in(id).emit(name, data)
+          }
+        })
+    }
+
+    notification_receieved(user, request):Promise {
+      var ground = this.lawn.ground
+      var query = ground.create_query('notification_target')
+      query.add_filter('recipient', user)
+      query.add_filter('notification', request.notification)
+      return query.run_single()
+        .then((object)=> {
+          if (!object)
+            throw new Lawn.HttpError('Could not find a notification with that id and target user.', 400)
+
+          if (object.received)
+            throw new Lawn.HttpError('That notification was already marked as received.', 400)
+
+          return ground.update_object('notification_target', {
+            id: object.id,
+            received: true
+          })
+            .then((object)=> {
+              return { message: "Notification is now marked as received."}
+            })
+        })
+    }
+
+    send_pending_notifications(user) {
+      var ground = this.lawn.ground
+      var query = ground.create_query('notification_target')
+      query.add_filter('recipient', user)
+      query.add_filter('received', false)
+      query.run()
+        .done((objects)=> {
+          for (var i = 0; i < objects.length; ++i) {
+            var notification = objects[i].notification
+            this.lawn.io.sockets.in(user.id).emit(notification.event, notification.data)
+          }
+        })
     }
   }
 }

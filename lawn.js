@@ -53,6 +53,10 @@ var Lawn = (function (_super) {
         this.vineyard.bulbs.songbird.notify(users, name, data);
     };
 
+    Lawn.prototype.notify = function (users, name, data) {
+        this.vineyard.bulbs.songbird.notify(users, name, data);
+    };
+
     Lawn.prototype.get_user_socket = function (id) {
         return this.instance_user_sockets[id];
     };
@@ -61,7 +65,7 @@ var Lawn = (function (_super) {
         var _this = this;
         this.instance_sockets[socket.id] = socket;
         this.instance_user_sockets[user.id] = socket;
-        socket.join(user.id);
+        socket.join('user/' + user.id);
 
         socket.on('query', function (request, callback) {
             return Irrigation.process('query', request, user, _this.vineyard, socket, callback);
@@ -71,11 +75,20 @@ var Lawn = (function (_super) {
             return Irrigation.process('update', request, user, _this.vineyard, socket, callback);
         });
 
+        this.on_socket(socket, 'room/join', user, function (request) {
+            console.log('room/join', user.id, request);
+            socket.join(request);
+        });
+
+        this.on_socket(socket, 'room/leave', user, function (request) {
+            console.log('room/leave', user.id, request);
+            socket.leave(request);
+        });
+
         this.invoke('socket.add', socket, user);
 
         user.online = true;
 
-        this.vineyard.bulbs.songbird.send_pending_notifications(user);
         console.log(process.pid, 'Logged in: ' + user.id);
     };
 
@@ -294,7 +307,7 @@ var Lawn = (function (_super) {
         socket.on(event, function (request, callback) {
             try  {
                 var promise = action(request);
-                if (promise && typeof promise.done == 'function')
+                if (promise && typeof promise.done == 'function') {
                     promise.done(function (response) {
                         response = response || {};
                         response.status = response.status || 200;
@@ -302,6 +315,9 @@ var Lawn = (function (_super) {
                     }, function (error) {
                         return callback(_this.process_error(error, user));
                     });
+                } else {
+                    callback({ status: 200 });
+                }
             } catch (err) {
                 callback(_this.process_error(err, user));
             }
@@ -750,6 +766,10 @@ var Lawn;
             this.lawn.on_socket(socket, 'notification/received', user, function (request) {
                 return _this.notification_receieved(user, request);
             });
+
+            this.lawn.on_socket(socket, 'notification/received', user, function (request) {
+                return _this.send_pending_notifications(user);
+            });
         };
 
         Songbird.prototype.notify = function (users, name, data, store) {
@@ -767,7 +787,7 @@ var Lawn;
                 for (var i = 0; i < users.length; ++i) {
                     var id = users[i];
                     console.log('sending-message', name, id, data);
-                    this.lawn.io.sockets.in(id).emit(name, data);
+                    this.lawn.io.sockets.in('user/' + id).emit(name, data);
                 }
             }
 
@@ -788,7 +808,7 @@ var Lawn;
                     }, _this.lawn.config.admin).run();
 
                     if (_this.lawn.io)
-                        _this.lawn.io.sockets.in(id).emit(name, data);
+                        _this.lawn.io.sockets.in('user/' + id).emit(name, data);
                 }
             });
         };
@@ -823,7 +843,7 @@ var Lawn;
             query.run().done(function (objects) {
                 for (var i = 0; i < objects.length; ++i) {
                     var notification = objects[i].notification;
-                    _this.lawn.io.sockets.in(user.id).emit(notification.event, notification.data);
+                    _this.lawn.io.sockets.in('user/' + user.id).emit(notification.event, notification.data);
                 }
             });
         };

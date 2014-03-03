@@ -52,6 +52,10 @@ class Lawn extends Vineyard.Bulb {
     this.vineyard.bulbs.songbird.notify(users, name, data)
   }
 
+  notify(users, name, data) {
+    this.vineyard.bulbs.songbird.notify(users, name, data)
+  }
+
   get_user_socket(id:number):Socket {
     return this.instance_user_sockets[id]
   }
@@ -59,7 +63,7 @@ class Lawn extends Vineyard.Bulb {
   initialize_session(socket, user) {
     this.instance_sockets[socket.id] = socket
     this.instance_user_sockets[user.id] = socket
-    socket.join(user.id)
+    socket.join('user/' + user.id)
 
     socket.on('query', (request, callback)=>
         Irrigation.process('query', request, user, this.vineyard, socket, callback)
@@ -69,11 +73,22 @@ class Lawn extends Vineyard.Bulb {
         Irrigation.process('update', request, user, this.vineyard, socket, callback)
     )
 
+    this.on_socket(socket, 'room/join', user, (request)=> {
+        console.log('room/join', user.id, request)
+        socket.join(request)
+      }
+    )
+
+    this.on_socket(socket, 'room/leave', user, (request)=> {
+        console.log('room/leave', user.id, request)
+        socket.leave(request)
+      }
+    )
+
     this.invoke('socket.add', socket, user)
 
     user.online = true
 
-    this.vineyard.bulbs.songbird.send_pending_notifications(user)
     console.log(process.pid, 'Logged in: ' + user.id)
   }
 
@@ -301,7 +316,7 @@ class Lawn extends Vineyard.Bulb {
     socket.on(event, (request, callback)=> {
       try {
         var promise = action(request)
-        if (promise && typeof promise.done == 'function')
+        if (promise && typeof promise.done == 'function') {
           promise.done((response)=> {
               response = response || {}
               response.status = response.status || 200
@@ -309,6 +324,10 @@ class Lawn extends Vineyard.Bulb {
             },
             (error)=> callback(this.process_error(error, user))
           )
+        }
+        else {
+          callback({ status: 200 })
+        }
       }
       catch (err) {
         callback(this.process_error(err, user))
@@ -781,7 +800,12 @@ module Lawn {
 
     initialize_socket(socket, user) {
       this.lawn.on_socket(socket, 'notification/received', user, (request)=>
-        this.notification_receieved(user, request))
+          this.notification_receieved(user, request)
+      )
+
+      this.lawn.on_socket(socket, 'notification/received', user, (request)=>
+          this.send_pending_notifications(user)
+      )
     }
 
     notify(users, name, data, store = true) {
@@ -798,7 +822,7 @@ module Lawn {
         for (var i = 0; i < users.length; ++i) {
           var id = users[i]
           console.log('sending-message', name, id, data)
-          this.lawn.io.sockets.in(id).emit(name, data)
+          this.lawn.io.sockets.in('user/' + id).emit(name, data)
         }
       }
 
@@ -820,7 +844,7 @@ module Lawn {
             }, this.lawn.config.admin).run()
 
             if (this.lawn.io)
-              this.lawn.io.sockets.in(id).emit(name, data)
+              this.lawn.io.sockets.in('user/' + id).emit(name, data)
           }
         })
     }
@@ -857,7 +881,7 @@ module Lawn {
         .done((objects)=> {
           for (var i = 0; i < objects.length; ++i) {
             var notification = objects[i].notification
-            this.lawn.io.sockets.in(user.id).emit(notification.event, notification.data)
+            this.lawn.io.sockets.in('user/' + user.id).emit(notification.event, notification.data)
           }
         })
     }

@@ -5,9 +5,10 @@
 declare var when: any;
 declare module Ground {
     class Database {
-        public settings: {};
+        public settings: any;
         public database: string;
         public log_queries: boolean;
+        public pool: any;
         constructor(settings: {}, database: string);
         public add_table_to_database(table: Ground.Table, ground: Ground.Core): Promise;
         public add_non_trellis_tables_to_database(tables: Ground.Table[], ground: Ground.Core): Promise;
@@ -82,6 +83,7 @@ declare module Ground {
         expansions?: string[];
         properties?: any[];
         subqueries?: any;
+        pager?: any;
     }
     interface External_Query_Source extends Property_Query_Source {
         trellis: string;
@@ -425,6 +427,7 @@ declare module Ground {
         private static process_property_filter(source, filter, ground);
         static process_property_filters(source: Ground.Query_Builder, ground: Ground.Core): Ground.Internal_Query_Source;
         static process_sorts(sorts: Ground.Query_Sort[], trellis: Ground.Trellis): string;
+        static render_pager(pager: Ground.IPager): string;
     }
 }
 declare module Ground {

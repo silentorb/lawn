@@ -1,4 +1,4 @@
-var MetaHub = require('metahub');var Ground = require('ground');var Vineyard = require('vineyard');var when = require('when');var __extends = this.__extends || function (d, b) {
+var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
@@ -406,7 +406,7 @@ var Lawn = (function (_super) {
             throw new Lawn.HttpError('Invalid File Name', 400);
 
         var path = require('path');
-        var filepath = path.join(this.vineyard.root_path, 'files', guid + '.' + ext);
+        var filepath = path.join(this.vineyard.root_path, this.config.file_path || 'files', guid + '.' + ext);
         console.log(filepath);
         return Lawn.file_exists(filepath).then(function (exists) {
             if (!exists)
@@ -483,7 +483,7 @@ var Lawn = (function (_super) {
             var path = require('path');
             var ext = path.extname(file.originalFilename) || '';
             var filename = guid + ext;
-            var filepath = 'files/' + filename;
+            var filepath = (_this.config.file_path || 'files') + '/' + filename;
             var fs = require('fs');
             fs.rename(file.path, filepath);
 
@@ -832,6 +832,3 @@ var Lawn;
     Lawn.Songbird = Songbird;
 })(Lawn || (Lawn = {}));
 //# sourceMappingURL=lawn.js.map
-module.exports = Lawn
-var Irrigation = Lawn.Irrigation
-require('source-map-support').install();

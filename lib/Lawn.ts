@@ -413,7 +413,7 @@ class Lawn extends Vineyard.Bulb {
       throw new Lawn.HttpError('Invalid File Name', 400)
 
     var path = require('path')
-    var filepath = path.join(this.vineyard.root_path, 'files', guid + '.' + ext)
+    var filepath = path.join(this.vineyard.root_path, this.config.file_path || 'files', guid + '.' + ext)
     console.log(filepath)
     return Lawn.file_exists(filepath)
       .then((exists)=> {
@@ -490,7 +490,7 @@ class Lawn extends Vineyard.Bulb {
       var path = require('path')
       var ext = path.extname(file.originalFilename) || ''
       var filename = guid + ext
-      var filepath = 'files/' + filename
+      var filepath = (this.config.file_path || 'files') + '/' + filename
       var fs = require('fs')
       fs.rename(file.path, filepath);
 

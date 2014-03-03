@@ -126,16 +126,16 @@
           "type": "int"
         },
         "notification": {
-          "type":"reference",
-          "trellis":"notification"
+          "type": "reference",
+          "trellis": "notification"
         },
-        "recipient":{
-          "type":"reference",
-          "trellis":"user"
+        "recipient": {
+          "type": "reference",
+          "trellis": "user"
         },
-        "received":{
-          "type":"bool",
-          "default":"false"
+        "received": {
+          "type": "bool",
+          "default": "false"
         }
       }
     },
@@ -185,6 +185,14 @@
         "phone": {
           "type": "string",
           "private": true
+        },
+        "address": {
+          "type": "reference",
+          "trellis": "address"
+        },
+        "image": {
+          "type": "reference",
+          "trellis": "file"
         }
       }
     },
@@ -247,6 +255,42 @@
         },
         "modified": {
           "type": "modified"
+        }
+      }
+    },
+    "address": {
+      "parent": "resource",
+      "properties": {
+        "country": {
+          "type": "reference",
+          "trellis": "country"
+        },
+        "province": {
+          "type": "reference",
+          "trellis": "province"
+        },
+        "city": {
+          "type": "string"
+        }
+      }
+    },
+    "country": {
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "province": {
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "name": {
+          "type": "string"
         }
       }
     }

@@ -567,6 +567,7 @@ module Lawn {
     cookie_secret?:string
     log_file?:string
     admin
+    file_path?:string
   }
 
   export interface Update_Request {

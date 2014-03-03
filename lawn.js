@@ -1,4 +1,4 @@
-var __extends = this.__extends || function (d, b) {
+var MetaHub = require('metahub');var Ground = require('ground');var Vineyard = require('vineyard');var when = require('when');var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
@@ -852,3 +852,6 @@ var Lawn;
     Lawn.Songbird = Songbird;
 })(Lawn || (Lawn = {}));
 //# sourceMappingURL=lawn.js.map
+module.exports = Lawn
+var Irrigation = Lawn.Irrigation
+require('source-map-support').install();

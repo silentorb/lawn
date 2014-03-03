@@ -60,6 +60,7 @@ declare module Lawn {
         cookie_secret?: string;
         log_file?: string;
         admin: any;
+        file_path?: string;
     }
     interface Update_Request {
         objects: any[];

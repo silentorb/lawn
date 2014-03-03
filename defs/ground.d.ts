@@ -343,7 +343,7 @@ declare module Ground {
         public is_readonly: boolean;
         public insert: string;
         public other_property: string;
-        public default: any;
+        public "default": any;
         public other_trellis: Ground.Trellis;
         public other_trellis_name: string;
         public is_private: boolean;
@@ -351,6 +351,7 @@ declare module Ground {
         public is_composite_sub: boolean;
         public composite_properties: any[];
         public access: string;
+        public allow_null: boolean;
         constructor(name: string, source: Ground.IProperty_Source, trellis: Ground.Trellis);
         public initialize_composite_reference(other_trellis: Ground.Trellis): void;
         public fullname(): string;

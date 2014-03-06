@@ -85,9 +85,8 @@ var Lawn = (function (_super) {
             socket.leave(request);
         });
 
-        this.invoke('socket.add', socket, user);
-
         user.online = true;
+        this.invoke('socket.add', socket, user);
 
         console.log(process.pid, 'Logged in: ' + user.id);
     };

@@ -85,9 +85,8 @@ class Lawn extends Vineyard.Bulb {
       }
     )
 
-    this.invoke('socket.add', socket, user)
-
     user.online = true
+    this.invoke('socket.add', socket, user)
 
     console.log(process.pid, 'Logged in: ' + user.id)
   }

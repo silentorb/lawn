@@ -92,10 +92,12 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.query_user = function (user, query) {
+        console.log('modifying query');
         if (!this.io)
             return;
 
         var clients = this.io.sockets.clients(user.id);
+        console.log('modifying query', clients.length);
         user.online = clients.length > 0;
     };
 

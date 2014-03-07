@@ -75,13 +75,19 @@ class Lawn extends Vineyard.Bulb {
 
     this.on_socket(socket, 'room/join', user, (request)=> {
         console.log('room/join', user.id, request)
-        socket.join(request)
+        socket.join(request.room)
       }
     )
 
     this.on_socket(socket, 'room/leave', user, (request)=> {
         console.log('room/leave', user.id, request)
-        socket.leave(request)
+        socket.leave(request.room)
+      }
+    )
+
+    this.on_socket(socket, 'room/emit', user, (request)=> {
+        console.log('room/emit', user.id, request)
+        socket.broadcast.to(request.room).emit(request.event_name, request.data) //emit to 'room' except this socket
       }
     )
 
@@ -93,10 +99,12 @@ class Lawn extends Vineyard.Bulb {
 
   // Attach user online status to any queried users
   query_user(user, query:Ground.Query_Builder) {
+    console.log('modifying query')
     if (!this.io)
       return
 
     var clients = this.io.sockets.clients(user.id)
+    console.log('modifying query', clients.length)
     user.online = clients.length > 0
   }
 
@@ -680,8 +688,6 @@ module Lawn {
           else
             throw new Authorization_Error('You are not authorized to perform this update', result)
         })
-
-
     }
   }
 

@@ -175,7 +175,7 @@
           "private": true
         },
         "online": {
-          "type": "bool"
+          "type": "bool",
           "default": false
         },
         "facebook_id": {

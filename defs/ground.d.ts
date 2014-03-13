@@ -193,12 +193,10 @@ declare module Ground {
     }
 }
 declare module Ground {
-    class Delete implements Ground.IUpdate {
-        public trellis: Ground.Trellis;
-        public seed: Ground.ISeed;
-        constructor(trellis: Ground.Trellis, seed: Ground.ISeed);
-        public get_access_name(): string;
-        public run(): Promise;
+    class Delete {
+        static max_depth: number;
+        static delete_child(link: Ground.Property, id: any, depth?: number): void;
+        static run(trellis: Ground.Trellis, seed: Ground.ISeed, depth?: number): Promise;
     }
 }
 declare module Ground {

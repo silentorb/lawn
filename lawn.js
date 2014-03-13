@@ -77,12 +77,17 @@ var Lawn = (function (_super) {
 
         this.on_socket(socket, 'room/join', user, function (request) {
             console.log('room/join', user.id, request);
-            socket.join(request);
+            socket.join(request.room);
         });
 
         this.on_socket(socket, 'room/leave', user, function (request) {
             console.log('room/leave', user.id, request);
-            socket.leave(request);
+            socket.leave(request.room);
+        });
+
+        this.on_socket(socket, 'room/emit', user, function (request) {
+            console.log('room/emit', user.id, request);
+            socket.broadcast.to(request.room).emit(request.event_name, request.data);
         });
 
         user.online = true;

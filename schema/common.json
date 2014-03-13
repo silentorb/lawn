@@ -175,8 +175,8 @@
           "private": true
         },
         "online": {
-          "type": "bool",
-          "is_virtual": "true"
+          "type": "bool"
+          "default": false
         },
         "facebook_id": {
           "type": "unsigned bigint",

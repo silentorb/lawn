@@ -18,6 +18,8 @@ class Lawn extends Vineyard.Bulb {
   grow() {
     var ground = this.ground
 
+    ground.db.query("UPDATE users SET online = 0 WHERE online = 1")
+
     if (this.config.log_updates) {
       this.listen(ground, '*.update', (seed, update:Ground.Update):Promise => {
         // Don't want an infinite loop
@@ -63,6 +65,8 @@ class Lawn extends Vineyard.Bulb {
   initialize_session(socket, user) {
     this.instance_sockets[socket.id] = socket
     this.instance_user_sockets[user.id] = socket
+    this.ground.db.query('UPDATE users SET online = 1 WHERE id = ' + user.id)
+
     socket.join('user/' + user.id)
 
     socket.on('query', (request, callback)=>
@@ -105,7 +109,7 @@ class Lawn extends Vineyard.Bulb {
 
     var clients = this.io.sockets.clients(user.id)
     console.log('modifying query', clients.length)
-    user.online = clients.length > 0
+//    user.online = clients.length > 0
   }
 
   start() {
@@ -302,7 +306,8 @@ class Lawn extends Vineyard.Bulb {
       if (user && !this.get_user_socket(user.id)) {
         this.debug(user.id);
         data = user
-        data.online = false;
+        this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id)
+//        data.online = false;
 //        return Server.notify.send_online_changed(user, false);
       }
     });

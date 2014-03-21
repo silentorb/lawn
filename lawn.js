@@ -65,6 +65,8 @@ var Lawn = (function (_super) {
         var _this = this;
         this.instance_sockets[socket.id] = socket;
         this.instance_user_sockets[user.id] = socket;
+        this.ground.db.query('UPDATE users SET online = 1 WHERE id = ' + user.id);
+
         socket.join('user/' + user.id);
 
         socket.on('query', function (request, callback) {
@@ -103,10 +105,10 @@ var Lawn = (function (_super) {
 
         var clients = this.io.sockets.clients(user.id);
         console.log('modifying query', clients.length);
-        user.online = clients.length > 0;
     };
 
     Lawn.prototype.start = function () {
+        this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1");
         this.start_http(this.config.ports.http);
         this.start_sockets(this.config.ports.websocket);
     };
@@ -293,7 +295,7 @@ var Lawn = (function (_super) {
             if (user && !_this.get_user_socket(user.id)) {
                 _this.debug(user.id);
                 data = user;
-                data.online = false;
+                _this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id);
             }
         });
     };

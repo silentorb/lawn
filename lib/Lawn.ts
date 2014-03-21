@@ -18,8 +18,6 @@ class Lawn extends Vineyard.Bulb {
   grow() {
     var ground = this.ground
 
-    ground.db.query("UPDATE users SET online = 0 WHERE online = 1")
-
     if (this.config.log_updates) {
       this.listen(ground, '*.update', (seed, update:Ground.Update):Promise => {
         // Don't want an infinite loop
@@ -113,6 +111,7 @@ class Lawn extends Vineyard.Bulb {
   }
 
   start() {
+    this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1")
     this.start_http(this.config.ports.http);
     this.start_sockets(this.config.ports.websocket);
   }

@@ -15,8 +15,9 @@ declare class Vineyard {
     constructor(config_file?: string);
     static create_ground(db_name: string, databases: any, trellis_files: any): Ground.Core;
     public get_bulb(name: string): Promise;
-    public load_bulbs(bulbs: any): void;
-    public load(config_file: string): void;
+    public load_bulb(name: string): void;
+    public load_all_bulbs(): void;
+    public load_config(config_file: string): void;
     public start(): void;
 }
 declare module Vineyard {

@@ -277,9 +277,10 @@ declare module Ground {
 }
 declare module Ground {
     interface IField {
-        relationship: string;
+        relationship?: string;
         name: string;
-        share: string;
+        share?: string;
+        other_table?: string;
     }
     class Table {
         public name: string;
@@ -320,7 +321,7 @@ declare module Ground {
         public trellises: Ground.Trellis[];
         public trellis_dictionary: {};
         public identities: Identity[];
-        constructor(trellises: Ground.Trellis[]);
+        constructor(trellises: Ground.Trellis[], table_name?: string);
         public create_identity(trellis: Ground.Trellis): Identity;
         static create_from_property(property: Ground.Property): Link_Trellis;
         static create_reference(property: Ground.Property, name: string): Identity_Key;
@@ -369,7 +370,7 @@ declare module Ground {
         public get_field_override(create_if_missing?: boolean): Ground.IField;
         public get_field_type(): any;
         public get_seed_name(): string;
-        public get_sql_value(value: any, type?: any): any;
+        public get_sql_value(value: any, type?: any, is_reference?: boolean): any;
         public get_type(): string;
         public get_other_id(entity: any): any;
         public get_other_property(create_if_none?: boolean): Property;

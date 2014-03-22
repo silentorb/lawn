@@ -79,13 +79,16 @@
           "type": "guid"
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "default": ""
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "default": ""
         },
         "size": {
-          "type": "int"
+          "type": "int",
+          "default": 0
         },
         "author": {
           "type": "reference",
@@ -96,7 +99,8 @@
           "type": "created"
         },
         "extension": {
-          "type": "string"
+          "type": "string",
+          "default": ""
         },
         "status": {
           "type": "int",
@@ -157,7 +161,8 @@
         },
         "email": {
           "type": "string",
-          "private": true
+          "private": true,
+          "allow_null": true
         },
         "created": {
           "type": "created",
@@ -180,19 +185,23 @@
         },
         "facebook_id": {
           "type": "unsigned bigint",
-          "private": true
+          "private": true,
+          "allow_null": true
         },
         "phone": {
           "type": "string",
-          "private": true
+          "private": true,
+          "allow_null": true
         },
         "address": {
           "type": "reference",
-          "trellis": "address"
+          "trellis": "address",
+          "allow_null": true
         },
         "image": {
           "type": "reference",
-          "trellis": "file"
+          "trellis": "file",
+          "allow_null": true
         }
       }
     },
@@ -222,16 +231,20 @@
           "trellis": "user"
         },
         "hostname": {
-          "type": "string"
+          "type": "string",
+          "allow_null": true
         },
         "timestamp": {
-          "type": "int"
+          "type": "int",
+          "default": 0
         },
         "cache": {
-          "type": "int"
+          "type": "int",
+          "allow_null": true
         },
         "session": {
-          "type": "text"
+          "type": "text",
+          "allow_null": true
         }
       }
     },
@@ -242,7 +255,8 @@
         },
         "user": {
           "type": "reference",
-          "trellis": "user"
+          "trellis": "user",
+          "allow_null": true
         },
         "data": {
           "type": "text"

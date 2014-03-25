@@ -20,13 +20,15 @@
           "type": "guid"
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "allow_null": true
         },
         "author": {
           "type": "reference",
           "trellis": "user",
           "insert": "author",
-          "readonly": true
+          "readonly": true,
+          "allow_null": true
         },
         "type": {
           "type": "string",
@@ -49,13 +51,15 @@
           "type": "int"
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "allow_null": true
         },
         "author": {
           "type": "reference",
           "trellis": "user",
           "insert": "author",
-          "readonly": true
+          "readonly": true,
+          "allow_null": true
         },
         "type": {
           "type": "string",
@@ -93,7 +97,8 @@
         "author": {
           "type": "reference",
           "trellis": "user",
-          "insert": "author"
+          "insert": "author",
+          "allow_null": true
         },
         "timestamp": {
           "type": "created"
@@ -274,14 +279,17 @@
     },
     "address": {
       "parent": "resource",
+      "plural": "addresses",
       "properties": {
         "country": {
           "type": "reference",
-          "trellis": "country"
+          "trellis": "country",
+          "default": 0
         },
         "province": {
           "type": "reference",
-          "trellis": "province"
+          "trellis": "province",
+          "default": 0
         },
         "city": {
           "type": "string"
@@ -289,6 +297,7 @@
       }
     },
     "country": {
+      "plural": "counties",
       "properties": {
         "id": {
           "type": "int"

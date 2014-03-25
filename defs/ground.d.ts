@@ -241,6 +241,7 @@ declare module Ground {
         public default_value: any;
         public parent: Property_Type;
         public db: Ground.Database;
+        public allow_null: boolean;
         constructor(name: string, info: any, types: Property_Type[]);
         public get_field_type(): any;
     }
@@ -363,6 +364,7 @@ declare module Ground {
         constructor(name: string, source: Ground.IProperty_Source, trellis: Ground.Trellis);
         public initialize_composite_reference(other_trellis: Ground.Trellis): void;
         public fullname(): string;
+        public get_allow_null(): boolean;
         public get_composite(): Property[];
         public get_data(): Ground.IProperty_Source;
         public get_default(): any;
@@ -411,7 +413,9 @@ declare module Ground {
         public subqueries: {};
         static operators: {
             '=': any;
-            'LIKE': (result: any, filter: any, property: any, data: any) => void;
+            'LIKE': {
+                "render": (result: any, filter: any, property: any, data: any) => void;
+            };
             '!=': any;
         };
         public filters: Query_Filter[];

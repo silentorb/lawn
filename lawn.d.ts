@@ -40,6 +40,7 @@ declare class Lawn extends Vineyard.Bulb {
     static process_public_http(req: any, res: any, action: any): void;
     public on_socket(socket: any, event: any, user: any, action: any): void;
     static listen_public_http(app: any, path: any, action: any, method?: string): void;
+    public listen_public_http(path: any, action: any, method?: string): void;
     public process_error(error: any, user: any): {
         status: any;
         message: any;

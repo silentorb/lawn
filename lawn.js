@@ -339,6 +339,13 @@ var Lawn = (function (_super) {
         });
     };
 
+    Lawn.prototype.listen_public_http = function (path, action, method) {
+        if (typeof method === "undefined") { method = 'post'; }
+        this.app[method](path, function (req, res) {
+            return Lawn.process_public_http(req, res, action);
+        });
+    };
+
     Lawn.prototype.process_error = function (error, user) {
         var status = error.status || 500;
         var message = status == 500 ? 'Server Error' : error.message;
@@ -478,10 +485,10 @@ var Lawn = (function (_super) {
             app.use(express.logger({ stream: log_file }));
         }
 
-        Lawn.listen_public_http(app, '/vineyard/login', function (req, res) {
+        this.listen_public_http('/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.body);
         });
-        Lawn.listen_public_http(app, '/vineyard/login', function (req, res) {
+        this.listen_public_http('/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.query);
         }, 'get');
 

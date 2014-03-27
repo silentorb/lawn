@@ -352,6 +352,13 @@ class Lawn extends Vineyard.Bulb {
     )
   }
 
+  listen_public_http(path, action, method = 'post') {
+    this.app[method](path, (req, res)=>
+        Lawn.process_public_http(req, res, action)
+    )
+  }
+
+
   process_error(error, user) {
     var status = error.status || 500
     var message = status == 500 ? 'Server Error' : error.message
@@ -494,8 +501,8 @@ class Lawn extends Vineyard.Bulb {
       app.use(express.logger({stream: log_file}))
     }
 
-    Lawn.listen_public_http(app, '/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
-    Lawn.listen_public_http(app, '/vineyard/login', (req, res)=> this.http_login(req, res, req.query), 'get')
+    this.listen_public_http('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
+    this.listen_public_http('/vineyard/login', (req, res)=> this.http_login(req, res, req.query), 'get')
 //    app.post('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
 //    app.get('/vineyard/login', (req, res)=> this.http_login(req, res, req.query))
     this.listen_user_http('/vineyard/query', (req, res, user)=> {

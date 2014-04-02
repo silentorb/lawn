@@ -355,6 +355,7 @@ declare module Ground {
         public other_trellis: Ground.Trellis;
         public other_trellis_name: string;
         public is_private: boolean;
+        public is_parent: boolean;
         public is_readonly: boolean;
         public is_virtual: boolean;
         public is_composite_sub: boolean;

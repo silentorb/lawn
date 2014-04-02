@@ -182,7 +182,7 @@ var Lawn = (function (_super) {
 
             var user = rows[0];
             return Lawn.create_session(user, req, _this.ground).then(function () {
-                return Lawn.send_http_login_success(req, res, user);
+                return _this.send_http_login_success(req, res, user);
             });
         });
     };
@@ -202,14 +202,15 @@ var Lawn = (function (_super) {
         });
     };
 
-    Lawn.send_http_login_success = function (req, res, user) {
-        res.send({
-            token: req.sessionID,
-            message: 'Login successful',
-            user: {
-                id: user.id,
-                name: user.name
-            }
+    Lawn.prototype.send_http_login_success = function (req, res, user) {
+        var query = this.ground.create_query('user');
+        query.add_key_filter(user.id);
+        query.run_single().then(function (row) {
+            res.send({
+                token: req.sessionID,
+                message: 'Login successful2',
+                user: Lawn.format_internal_user(row)
+            });
         });
     };
 
@@ -710,7 +711,7 @@ var Lawn;
 
             return this.get_user(body).then(function (user) {
                 return Lawn.create_session(user, req, _this.ground).then(function () {
-                    return Lawn.send_http_login_success(req, res, user);
+                    return _this.lawn.send_http_login_success(req, res, user);
                 });
             });
         };

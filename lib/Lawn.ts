@@ -189,7 +189,7 @@ class Lawn extends Vineyard.Bulb {
 
         var user = rows[0];
         return Lawn.create_session(user, req, this.ground)
-          .then(()=> Lawn.send_http_login_success(req, res, user))
+          .then(()=> this.send_http_login_success(req, res, user))
       })
   }
 
@@ -210,15 +210,17 @@ class Lawn extends Vineyard.Bulb {
       .then(() => session)
   }
 
-  static send_http_login_success(req, res, user) {
-    res.send({
-      token: req.sessionID,
-      message: 'Login successful',
-      user: {
-        id: user.id,
-        name: user.name
-      }
-    })
+  send_http_login_success(req, res, user) {
+    var query = this.ground.create_query('user')
+    query.add_key_filter(user.id)
+    query.run_single()
+      .then((row)=> {
+        res.send({
+          token: req.sessionID,
+          message: 'Login successful2',
+          user: Lawn.format_internal_user(row)
+        })
+      })
   }
 
   static request(options, data = null, secure = false):Promise {
@@ -736,7 +738,7 @@ module Lawn {
       return this.get_user(body)
         .then((user)=> {
           return Lawn.create_session(user, req, this.ground)
-            .then(()=> Lawn.send_http_login_success(req, res, user))
+            .then(()=> this.lawn.send_http_login_success(req, res, user))
         })
     }
 

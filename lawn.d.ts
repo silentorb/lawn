@@ -1,10 +1,6 @@
-/// <reference path="socket.io.extension.d.ts" />
-
-/// <reference path="metahub.d.ts" />
-/// <reference path="ground.d.ts" />
-/// <reference path="vineyard.d.ts" />
-
-declare var Irrigation: any;
+/// <reference path="defs/socket.io.extension.d.ts" />
+/// <reference path="defs/express.d.ts" />
+/// <reference path="lib/references.d.ts" />
 declare class Lawn extends Vineyard.Bulb {
     public io: any;
     public instance_sockets: {};
@@ -100,6 +96,4 @@ declare module Lawn {
         public send_pending_notifications(user: any): void;
     }
 }
-declare module "lawn" {
-  export = Lawn
-}
+declare module "lawn" { export = Lawn }

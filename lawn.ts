@@ -1,6 +1,8 @@
-///<reference path="../defs/socket.io.extension.d.ts"/>
-///<reference path="../defs/express.d.ts"/>
-/// <reference path="references.ts"/>
+///<reference path="defs/socket.io.extension.d.ts"/>
+///<reference path="defs/express.d.ts"/>
+/// <reference path="lib/references.ts"/>
+
+var when = require('when')
 
 declare var Irrigation
 
@@ -910,3 +912,5 @@ module Lawn {
     }
   }
 }
+
+export = Lawn

@@ -3,7 +3,7 @@
 // Definitions by: William Orr <https://github.com/worr>
 // Definitions: https://github.com/borisyankov/DefinitelyTyped
 
-///<reference path='node.d.ts' />
+///<reference path='../../ground/defs/node.d.ts' />
 
 declare module "socket.io" {
 	import http = require('http');

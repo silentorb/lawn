@@ -33,7 +33,7 @@ declare class Lawn extends Vineyard.Bulb {
     public get_user_from_session(token: string): Promise;
     public http_login(req: any, res: any, body: any): Promise;
     static create_session(user: any, req: any, ground: any): Promise;
-    static send_http_login_success(req: any, res: any, user: any): void;
+    public send_http_login_success(req: any, res: any, user: any): void;
     static request(options: any, data?: any, secure?: boolean): Promise;
     public login(data: any, socket: ISocket, callback: any): void;
     public on_connection(socket: ISocket): Socket;

@@ -264,13 +264,14 @@ class Lawn extends Vineyard.Bulb {
 
   login(data, socket:ISocket, callback) {
     console.log('message2', data);
-    if (!data.token)
-      return socket.emit('error', { message: 'Missing token.' })
+    if (!data.token) {
+      socket.emit('error', { message: 'Missing token.' })
+    }
 
     var query = this.ground.create_query('session')
     query.add_key_filter(data.token)
 
-    return this.get_user_from_session(data.token)
+    this.get_user_from_session(data.token)
       .then((user)=> {
         this.initialize_session(socket, user);
         console.log('user', user)
@@ -289,7 +290,8 @@ class Lawn extends Vineyard.Bulb {
           'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
         })
       }
-    )
+    ).done()
+
   }
 
   on_connection(socket:ISocket) {
@@ -556,8 +558,10 @@ class Lawn extends Vineyard.Bulb {
   }
 
   stop() {
+    console.log('Stopping Lawn')
     // Socket IO's documentation is a joke.  I had to look on stack overflow for how to close a socket server.
     if (this.io && this.io.server) {
+      console.log('Stopping Socket.IO')
       this.io.server.close()
       this.io = null
     }

@@ -18,7 +18,8 @@ declare class Vineyard {
     public load_bulb(name: string): void;
     public load_all_bulbs(): void;
     public load_config(config_file: string): void;
-    public start(): void;
+    public start(): Promise;
+    public stop(): Promise;
 }
 declare module Vineyard {
     interface IUser {

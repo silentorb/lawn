@@ -254,13 +254,14 @@ var Lawn = (function (_super) {
     Lawn.prototype.login = function (data, socket, callback) {
         var _this = this;
         console.log('message2', data);
-        if (!data.token)
-            return socket.emit('error', { message: 'Missing token.' });
+        if (!data.token) {
+            socket.emit('error', { message: 'Missing token.' });
+        }
 
         var query = this.ground.create_query('session');
         query.add_key_filter(data.token);
 
-        return this.get_user_from_session(data.token).then(function (user) {
+        this.get_user_from_session(data.token).then(function (user) {
             _this.initialize_session(socket, user);
             console.log('user', user);
             if (callback) {
@@ -276,7 +277,7 @@ var Lawn = (function (_super) {
             socket.emit('error', {
                 'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
             });
-        });
+        }).done();
     };
 
     Lawn.prototype.on_connection = function (socket) {
@@ -543,7 +544,10 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.stop = function () {
+        console.log('Stopping Lawn');
+
         if (this.io && this.io.server) {
+            console.log('Stopping Socket.IO');
             this.io.server.close();
             this.io = null;
         }

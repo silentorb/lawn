@@ -5,6 +5,9 @@ var __extends = this.__extends || function (d, b) {
     d.prototype = new __();
 };
 var when = require('when');
+var MetaHub = require('vineyard-metahub');
+var Ground = require('vineyard-ground');
+var Vineyard = require('vineyard');
 
 var Lawn = (function (_super) {
     __extends(Lawn, _super);
@@ -71,11 +74,11 @@ var Lawn = (function (_super) {
         socket.join('user/' + user.id);
 
         socket.on('query', function (request, callback) {
-            return Irrigation.process('query', request, user, _this.vineyard, socket, callback);
+            return Lawn.Irrigation.process('query', request, user, _this.vineyard, socket, callback);
         });
 
         socket.on('update', function (request, callback) {
-            return Irrigation.process('update', request, user, _this.vineyard, socket, callback);
+            return Lawn.Irrigation.process('update', request, user, _this.vineyard, socket, callback);
         });
 
         this.on_socket(socket, 'room/join', user, function (request) {
@@ -175,7 +178,6 @@ var Lawn = (function (_super) {
             return this.vineyard.bulbs.facebook.login(req, res, body);
 
         console.log('login', body);
-        var mysql = require('mysql');
         return this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
             if (rows.length == 0) {
                 throw new Lawn.HttpError('Invalid login info.', 400);
@@ -482,6 +484,17 @@ var Lawn = (function (_super) {
 
         app.use(express.session({ secret: this.config.cookie_secret }));
 
+        if (typeof this.config.mysql_session_store == 'object') {
+            var Session_Store = require('express-mysql-session');
+            var storage_config = this.config.mysql_session_store;
+
+            app.use(express.session({
+                key: storage_config.key,
+                secret: storage_config.secret,
+                store: new Session_Store(storage_config.db)
+            }));
+        }
+
         if (typeof this.config.log_file === 'string') {
             var fs = require('fs');
             var log_file = fs.createWriteStream(this.config.log_file, { flags: 'a' });
@@ -494,7 +507,6 @@ var Lawn = (function (_super) {
         this.listen_public_http('/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.query);
         }, 'get');
-
         this.listen_user_http('/vineyard/query', function (req, res, user) {
             console.log('server recieved query request.');
             return Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (objects) {
@@ -550,6 +562,10 @@ var Lawn = (function (_super) {
 
         if (this.io && this.io.server) {
             console.log('Stopping Socket.IO');
+            var clients = this.io.sockets.clients();
+            for (var i in clients) {
+                clients[i].disconnect();
+            }
             this.io.server.close();
             this.io = null;
         }
@@ -560,11 +576,13 @@ var Lawn = (function (_super) {
         }
 
         if (this.http) {
-            console.log('Closing HTTP connection.');
+            console.log('Closing HTTP.');
             this.http.close();
             this.http = null;
             this.app = null;
         }
+
+        console.log('Lawn is stopped.');
     };
     Lawn.public_user_properties = ['id', 'name', 'username', 'email'];
     Lawn.internal_user_properties = Lawn.public_user_properties.concat(['roles']);

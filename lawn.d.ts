@@ -50,6 +50,18 @@ declare class Lawn extends Vineyard.Bulb {
     public stop(): void;
 }
 declare module Lawn {
+    interface Session_Store_DB {
+        host: string;
+        port: number;
+        user: string;
+        password: string;
+        database: string;
+    }
+    interface Session_Store_Config {
+        key: string;
+        secret: string;
+        db: Session_Store_DB;
+    }
     interface Config {
         ports: any;
         log_updates?: boolean;
@@ -58,6 +70,7 @@ declare module Lawn {
         log_file?: string;
         admin: any;
         file_path?: string;
+        mysql_session_store?: Session_Store_Config;
     }
     interface Update_Request {
         objects: any[];
@@ -96,4 +109,4 @@ declare module Lawn {
         public send_pending_notifications(user: any): void;
     }
 }
-declare module "lawn" { export = Lawn }
+declare module "vineyard-lawn" { export = Lawn }

@@ -2,7 +2,10 @@
 ///<reference path="defs/express.d.ts"/>
 /// <reference path="lib/references.ts"/>
 
-var when = require('when')
+import when = require('when')
+import MetaHub = require('vineyard-metahub')
+import Ground = require('vineyard-ground')
+import Vineyard = require('vineyard')
 
 declare var Irrigation
 
@@ -70,11 +73,11 @@ class Lawn extends Vineyard.Bulb {
     socket.join('user/' + user.id)
 
     socket.on('query', (request, callback)=>
-        Irrigation.process('query', request, user, this.vineyard, socket, callback)
+        Lawn.Irrigation.process('query', request, user, this.vineyard, socket, callback)
     )
 
     socket.on('update', (request, callback)=>
-        Irrigation.process('update', request, user, this.vineyard, socket, callback)
+        Lawn.Irrigation.process('update', request, user, this.vineyard, socket, callback)
     )
 
     this.on_socket(socket, 'room/join', user, (request)=> {
@@ -182,7 +185,6 @@ class Lawn extends Vineyard.Bulb {
       return this.vineyard.bulbs.facebook.login(req, res, body)
 
     console.log('login', body)
-    var mysql = require('mysql')
     return this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass])
       .then((rows)=> {
         if (rows.length == 0) {
@@ -500,6 +502,16 @@ class Lawn extends Vineyard.Bulb {
 
     app.use(express.session({secret: this.config.cookie_secret}))
 
+    if (typeof this.config.mysql_session_store == 'object') {
+      var Session_Store = require('express-mysql-session')
+      var storage_config = <Lawn.Session_Store_Config>this.config.mysql_session_store
+
+      app.use(express.session({
+        key: storage_config.key,
+        secret: storage_config.secret,
+        store: new Session_Store(storage_config.db)
+      }))
+    }
     // Log request info to a file
     if (typeof this.config.log_file === 'string') {
       var fs = require('fs')
@@ -509,8 +521,6 @@ class Lawn extends Vineyard.Bulb {
 
     this.listen_public_http('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
     this.listen_public_http('/vineyard/login', (req, res)=> this.http_login(req, res, req.query), 'get')
-//    app.post('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
-//    app.get('/vineyard/login', (req, res)=> this.http_login(req, res, req.query))
     this.listen_user_http('/vineyard/query', (req, res, user)=> {
       console.log('server recieved query request.')
       return Irrigation.query(req.body, user, this.ground, this.vineyard)
@@ -566,6 +576,10 @@ class Lawn extends Vineyard.Bulb {
     // Socket IO's documentation is a joke.  I had to look on stack overflow for how to close a socket server.
     if (this.io && this.io.server) {
       console.log('Stopping Socket.IO')
+      var clients = this.io.sockets.clients()
+      for (var i in clients) {
+        clients[i].disconnect()
+      }
       this.io.server.close()
       this.io = null
     }
@@ -576,15 +590,31 @@ class Lawn extends Vineyard.Bulb {
     }
 
     if (this.http) {
-      console.log('Closing HTTP connection.')
+      console.log('Closing HTTP.')
       this.http.close()
       this.http = null
       this.app = null
     }
+
+    console.log('Lawn is stopped.')
   }
 }
 
 module Lawn {
+
+  export interface Session_Store_DB {
+    host:string
+    port:number
+    user:string
+    password:string
+    database:string
+  }
+
+  export interface Session_Store_Config {
+    key:string
+    secret:string
+    db: Session_Store_DB
+  }
 
   export interface Config {
     ports
@@ -594,6 +624,7 @@ module Lawn {
     log_file?:string
     admin
     file_path?:string
+    mysql_session_store?:Session_Store_Config
   }
 
   export interface Update_Request {

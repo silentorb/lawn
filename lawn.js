@@ -620,13 +620,15 @@ var Lawn;
             var action = Irrigation[method];
             return fortress.get_roles(user).then(function () {
                 return action(request, user, vineyard.ground, vineyard);
-            }).then(function (objects) {
+            }).then(function (result) {
+                result.status = 200;
+                result.message = 'Success';
                 if (callback)
-                    callback({ status: 200, 'message': 'Success', objects: objects });
+                    callback(result);
                 else if (method != 'update')
                     socket.emit('error', {
                         status: 400,
-                        message: 'Requests need to ask for an acknowledgement',
+                        message: 'Query requests need to ask for an acknowledgement',
                         request: request
                     });
             }, function (error) {
@@ -690,7 +692,11 @@ var Lawn;
                     var update_promises = updates.map(function (update) {
                         return update.run();
                     });
-                    return when.all(update_promises);
+                    return when.all(update_promises).then(function (objects) {
+                        return {
+                            objects: objects
+                        };
+                    });
                 } else
                     throw new Authorization_Error('You are not authorized to perform this update', result);
             });

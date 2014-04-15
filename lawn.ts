@@ -659,13 +659,15 @@ module Lawn {
       var action = Irrigation[method]
       return fortress.get_roles(user)
         .then(()=> action(request, user, vineyard.ground, vineyard))
-        .then((objects)=> {
+        .then((result)=> {
+          result.status = 200
+          result.message = 'Success'
           if (callback)
-            callback({ status: 200, 'message': 'Success', objects: objects })
+            callback(result)
           else if (method != 'update')
             socket.emit('error', {
               status: 400,
-              message: 'Requests need to ask for an acknowledgement',
+              message: 'Query requests need to ask for an acknowledgement',
               request: request
             })
         },
@@ -698,6 +700,7 @@ module Lawn {
         })
     }
 
+
     static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
       if (!request)
         throw new HttpError('Empty request', 400)
@@ -711,7 +714,7 @@ module Lawn {
       return fortress.query_access(user, query)
         .then((result)=> {
           if (result.access)
-            return query.run();
+            return query.run()
           else
             throw new Authorization_Error('You are not authorized to perform this query', result)
         })
@@ -734,6 +737,11 @@ module Lawn {
           if (result.access) {
             var update_promises = updates.map((update) => update.run())
             return when.all(update_promises)
+              .then((objects)=> {
+                return {
+                  objects: objects
+                }
+              })
           }
           else
             throw new Authorization_Error('You are not authorized to perform this update', result)

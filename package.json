@@ -1,6 +1,6 @@
 {
   "name": "vineyard-lawn",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Vineyard Node.js server",
   "main": "lawn.js",
   "repository": {

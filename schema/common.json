@@ -281,7 +281,11 @@
       "parent": "resource",
       "plural": "addresses",
       "properties": {
-        "street": {
+        "street1": {
+          "type": "string",
+          "allow_null": true
+        },
+        "street2": {
           "type": "string",
           "allow_null": true
         },
@@ -298,6 +302,10 @@
           "allow_null": true
         },
         "city": {
+          "type": "string",
+          "allow_null": true
+        },
+        "zip": {
           "type": "string",
           "allow_null": true
         }

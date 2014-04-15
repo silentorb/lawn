@@ -281,18 +281,25 @@
       "parent": "resource",
       "plural": "addresses",
       "properties": {
+        "street": {
+          "type": "string",
+          "allow_null": true
+        },
         "country": {
           "type": "reference",
           "trellis": "country",
-          "default": 0
+          "default": 0,
+          "allow_null": true
         },
         "province": {
           "type": "reference",
           "trellis": "province",
-          "default": 0
+          "default": 0,
+          "allow_null": true
         },
         "city": {
-          "type": "string"
+          "type": "string",
+          "allow_null": true
         }
       }
     },

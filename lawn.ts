@@ -106,12 +106,12 @@ class Lawn extends Vineyard.Bulb {
 
   // Attach user online status to any queried users
   query_user(user, query:Ground.Query_Builder) {
-    console.log('modifying query')
+//    console.log('modifying query')
     if (!this.io)
       return
 
     var clients = this.io.sockets.clients(user.id)
-    console.log('modifying query', clients.length)
+//    console.log('modifying query', clients.length)
 //    user.online = clients.length > 0
   }
 
@@ -333,6 +333,7 @@ class Lawn extends Vineyard.Bulb {
 
   on_socket(socket, event, user, action) {
     socket.on(event, (request, callback)=> {
+      callback = callback || function() {}
       try {
         var promise = action(request)
         if (promise && typeof promise.done == 'function') {

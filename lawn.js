@@ -103,12 +103,10 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.query_user = function (user, query) {
-        console.log('modifying query');
         if (!this.io)
             return;
 
         var clients = this.io.sockets.clients(user.id);
-        console.log('modifying query', clients.length);
     };
 
     Lawn.prototype.start = function () {
@@ -318,6 +316,8 @@ var Lawn = (function (_super) {
     Lawn.prototype.on_socket = function (socket, event, user, action) {
         var _this = this;
         socket.on(event, function (request, callback) {
+            callback = callback || function () {
+            };
             try  {
                 var promise = action(request);
                 if (promise && typeof promise.done == 'function') {

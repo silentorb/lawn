@@ -1,5 +1,11 @@
 {
   "tables": {
+    "address": {
+      "name": "addresses"
+    },
+    "country": {
+      "name": "countries"
+    },
     "roles_users": {
       "primary_keys": [ "user", "role" ],
       "properties": {
@@ -279,7 +285,6 @@
     },
     "address": {
       "parent": "resource",
-      "plural": "addresses",
       "properties": {
         "street1": {
           "type": "string",

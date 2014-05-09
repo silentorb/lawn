@@ -165,13 +165,13 @@ class Lawn extends Vineyard.Bulb {
       .then((session) => {
         console.log('session', session)
         if (!session)
-          throw new Lawn.HttpError('Session not found.', 400)
+          throw new Lawn.HttpError('Session not found.', 401)
 
         if (session.token === 0)
-          throw new Lawn.HttpError('Invalid session.', 400)
+          throw new Lawn.HttpError('Invalid session.', 401)
 
         if (typeof session.user !== 'object')
-          throw new Lawn.HttpError('User not found.', 400)
+          throw new Lawn.HttpError('User not found.', 401)
 
         var user = session.user
 
@@ -413,7 +413,7 @@ class Lawn extends Vineyard.Bulb {
 
   listen_user_http(path, action, method = 'post') {
     this.app[method](path, (req, res)=> {
-        console.log('server recieved query request.')
+//        console.log('server recieved query request.')
         this.process_user_http(req, res, action)
       }
     )
@@ -524,8 +524,14 @@ class Lawn extends Vineyard.Bulb {
     this.listen_public_http('/vineyard/login', (req, res)=> this.http_login(req, res, req.query), 'get')
     this.listen_user_http('/vineyard/query', (req, res, user)=> {
       console.log('server recieved query request.')
-      return Irrigation.query(req.body, user, this.ground, this.vineyard)
+      return Lawn.Irrigation.query(req.body, user, this.ground, this.vineyard)
         .then((objects)=> res.send({ message: 'Success', objects: objects })
+      )
+    })
+    this.listen_user_http('/vineyard/update', (req, res, user)=> {
+      console.log('server recieved query request.')
+      return Lawn.Irrigation.update(req.body, user, this.ground, this.vineyard)
+        .then((result)=> res.send(result)
       )
     })
 

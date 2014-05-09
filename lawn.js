@@ -156,13 +156,13 @@ var Lawn = (function (_super) {
         return query.run_single().then(function (session) {
             console.log('session', session);
             if (!session)
-                throw new Lawn.HttpError('Session not found.', 400);
+                throw new Lawn.HttpError('Session not found.', 401);
 
             if (session.token === 0)
-                throw new Lawn.HttpError('Invalid session.', 400);
+                throw new Lawn.HttpError('Invalid session.', 401);
 
             if (typeof session.user !== 'object')
-                throw new Lawn.HttpError('User not found.', 400);
+                throw new Lawn.HttpError('User not found.', 401);
 
             var user = session.user;
 
@@ -396,7 +396,6 @@ var Lawn = (function (_super) {
         if (typeof method === "undefined") { method = 'post'; }
         var _this = this;
         this.app[method](path, function (req, res) {
-            console.log('server recieved query request.');
             _this.process_user_http(req, res, action);
         });
     };
@@ -509,8 +508,14 @@ var Lawn = (function (_super) {
         }, 'get');
         this.listen_user_http('/vineyard/query', function (req, res, user) {
             console.log('server recieved query request.');
-            return Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (objects) {
+            return Lawn.Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (objects) {
                 return res.send({ message: 'Success', objects: objects });
+            });
+        });
+        this.listen_user_http('/vineyard/update', function (req, res, user) {
+            console.log('server recieved query request.');
+            return Lawn.Irrigation.update(req.body, user, _this.ground, _this.vineyard).then(function (result) {
+                return res.send(result);
             });
         });
 

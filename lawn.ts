@@ -145,14 +145,14 @@ class Lawn extends Vineyard.Bulb {
   get_public_user(user):Promise {
     if (typeof user == 'object') {
       if (Lawn.is_ready_user_object(user)) {
-        return Lawn.format_public_user(user)
+        return when.resolve(Lawn.format_public_user(user))
       }
     }
 
     var id = typeof user == 'object' ? user.id : user
     var query = this.ground.create_query('user')
     query.add_key_filter(id)
-    return query.run()
+    return query.run_single()
       .then((user)=> Lawn.format_public_user(user))
   }
 
@@ -313,7 +313,8 @@ class Lawn extends Vineyard.Bulb {
       if (user && !this.get_user_socket(user.id)) {
         this.debug(user.id);
         data = user
-        this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id)
+        if (this.ground.db.active)
+          this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id)
 //        data.online = false;
 //        return Server.notify.send_online_changed(user, false);
       }

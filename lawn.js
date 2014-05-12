@@ -136,14 +136,14 @@ var Lawn = (function (_super) {
     Lawn.prototype.get_public_user = function (user) {
         if (typeof user == 'object') {
             if (Lawn.is_ready_user_object(user)) {
-                return Lawn.format_public_user(user);
+                return when.resolve(Lawn.format_public_user(user));
             }
         }
 
         var id = typeof user == 'object' ? user.id : user;
         var query = this.ground.create_query('user');
         query.add_key_filter(id);
-        return query.run().then(function (user) {
+        return query.run_single().then(function (user) {
             return Lawn.format_public_user(user);
         });
     };
@@ -298,7 +298,8 @@ var Lawn = (function (_super) {
             if (user && !_this.get_user_socket(user.id)) {
                 _this.debug(user.id);
                 data = user;
-                _this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id);
+                if (_this.ground.db.active)
+                    _this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id);
             }
         });
     };

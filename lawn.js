@@ -509,14 +509,22 @@ var Lawn = (function (_super) {
         }, 'get');
         this.listen_user_http('/vineyard/query', function (req, res, user) {
             console.log('server recieved query request.');
-            return Lawn.Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (objects) {
-                return res.send({ message: 'Success', objects: objects });
+            return Lawn.Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (result) {
+                if (!result.status)
+                    result.status = 200;
+
+                result.message = 'Success';
+                res.send(result);
             });
         });
         this.listen_user_http('/vineyard/update', function (req, res, user) {
             console.log('server recieved query request.');
             return Lawn.Irrigation.update(req.body, user, _this.ground, _this.vineyard).then(function (result) {
-                return res.send(result);
+                if (!result.status)
+                    result.status = 200;
+
+                result.message = 'Success';
+                res.send(result);
             });
         });
 

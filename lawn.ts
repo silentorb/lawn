@@ -526,14 +526,24 @@ class Lawn extends Vineyard.Bulb {
     this.listen_user_http('/vineyard/query', (req, res, user)=> {
       console.log('server recieved query request.')
       return Lawn.Irrigation.query(req.body, user, this.ground, this.vineyard)
-        .then((objects)=> res.send({ message: 'Success', objects: objects })
-      )
+        .then((result)=> {
+          if (!result.status)
+            result.status = 200
+
+          result.message = 'Success'
+          res.send(result)
+        })
     })
     this.listen_user_http('/vineyard/update', (req, res, user)=> {
       console.log('server recieved query request.')
       return Lawn.Irrigation.update(req.body, user, this.ground, this.vineyard)
-        .then((result)=> res.send(result)
-      )
+        .then((result)=> {
+          if (!result.status)
+            result.status = 200
+
+          result.message = 'Success'
+          res.send(result)
+        })
     })
 
     this.listen_user_http('/vineyard/upload', (req, res, user)=> {

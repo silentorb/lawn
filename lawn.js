@@ -299,8 +299,10 @@ var Lawn = (function (_super) {
                 _this.debug(user.id);
                 data = user;
                 if (_this.ground.db.active)
-                    _this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id);
+                    return _this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id);
             }
+
+            return when.resolve();
         });
     };
 
@@ -527,6 +529,14 @@ var Lawn = (function (_super) {
                 res.send(result);
             });
         });
+
+        this.listen_user_http('/vineyard/current-user', function (req, res, user) {
+            res.send({
+                status: 200,
+                user: Lawn.format_public_user(user)
+            });
+            return when.resolve();
+        }, 'get');
 
         this.listen_user_http('/vineyard/upload', function (req, res, user) {
             console.log('files', req.files);

@@ -314,10 +314,12 @@ class Lawn extends Vineyard.Bulb {
         this.debug(user.id);
         data = user
         if (this.ground.db.active)
-          this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id)
+          return this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id)
 //        data.online = false;
 //        return Server.notify.send_online_changed(user, false);
       }
+
+      return when.resolve()
     });
   }
 
@@ -545,6 +547,14 @@ class Lawn extends Vineyard.Bulb {
           res.send(result)
         })
     })
+
+    this.listen_user_http('/vineyard/current-user', (req, res, user)=> {
+      res.send({
+        status: 200,
+        user: Lawn.format_public_user(user)
+      })
+      return when.resolve()
+    }, 'get')
 
     this.listen_user_http('/vineyard/upload', (req, res, user)=> {
       console.log('files', req.files)

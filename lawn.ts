@@ -9,6 +9,18 @@ import Vineyard = require('vineyard')
 
 declare var Irrigation
 
+interface User_Source {
+  name:string
+  username:string
+  password:string
+  email?:string
+  phone?:string
+  gender?:string
+  facebook_token?:string
+  image?:string
+  address?
+}
+
 class Lawn extends Vineyard.Bulb {
   io // Socket IO
   instance_sockets = {}
@@ -53,21 +65,22 @@ class Lawn extends Vineyard.Bulb {
 //      return this.ground.db.query("INSERT INTO debug (source, message, time) VALUES ('server', '" + text + "', " + time + ")");
   }
 
-  emit_to_users(users, name, data) {
-    this.vineyard.bulbs.songbird.notify(users, name, data)
+  emit_to_users(users, name, data):Promise {
+    return this.vineyard.bulbs.songbird.notify(users, name, data)
   }
 
-  notify(users, name, data) {
-    this.vineyard.bulbs.songbird.notify(users, name, data)
+  notify(users, name, data):Promise {
+    return this.vineyard.bulbs.songbird.notify(users, name, data)
   }
 
-  get_user_socket(id:number):Socket {
-    return this.instance_user_sockets[id]
-  }
+  get_user_sockets(id:number):Socket[] {
+    return MetaHub.map_to_array(this.instance_user_sockets[id], (x)=> x )
+      || []  }
 
   initialize_session(socket, user) {
     this.instance_sockets[socket.id] = socket
-    this.instance_user_sockets[user.id] = socket
+    this.instance_user_sockets[user.id] = this.instance_user_sockets[user.id] || []
+    this.instance_user_sockets[user.id][socket.id] = socket
     this.ground.db.query('UPDATE users SET online = 1 WHERE id = ' + user.id)
 
     socket.join('user/' + user.id)
@@ -116,9 +129,11 @@ class Lawn extends Vineyard.Bulb {
   }
 
   start() {
-    this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1")
-    this.start_http(this.config.ports.http);
-    this.start_sockets(this.config.ports.websocket);
+    return this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1")
+      .then(()=> {
+        this.start_http(this.config.ports.http);
+        this.start_sockets(this.config.ports.websocket);
+      })
   }
 
   static public_user_properties = [ 'id', 'name', 'username', 'email' ]
@@ -192,8 +207,11 @@ class Lawn extends Vineyard.Bulb {
         }
 
         var user = rows[0];
-        return Lawn.create_session(user, req, this.ground)
-          .then(()=> this.send_http_login_success(req, res, user))
+        this.invoke('user.login', user)
+          .then(()=> {
+            return Lawn.create_session(user, req, this.ground)
+              .then(()=> this.send_http_login_success(req, res, user))
+          })
       })
   }
 
@@ -225,6 +243,79 @@ class Lawn extends Vineyard.Bulb {
           user: Lawn.format_internal_user(row)
         })
       })
+  }
+
+
+  register(req, res):Promise {
+    var body = <User_Source>req.body,
+      name = body.name,
+      username = body.username,
+      email = body.email,
+      phone = body.phone,
+      facebook_token = body.facebook_token
+
+    var invalid_characters = /[^A-Za-z\- _0-9]/
+
+    if (!name)
+      throw new Lawn.HttpError('Request missing name.', 400)
+
+    if (typeof name != 'string' || name.length > 32 || name.match(invalid_characters))
+      throw new Lawn.HttpError('Invalid name.', 400)
+
+    if (typeof username != 'string' || username.length > 32 || name.match(invalid_characters))
+      throw new Lawn.HttpError('Invalid name.', 400)
+
+    if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
+      throw new Lawn.HttpError('Invalid email address.', 400)
+
+    var register = (facebook_id = undefined)=> {
+      var args = [ body.name ]
+      var sql = "SELECT 'name' as value FROM users WHERE name = ?"
+      if (body.email) {
+        sql += "UNION SELECT 'email' as value FROM users WHERE email = ?"
+        args.push(body.email)
+      }
+
+      return this.ground.db.query(sql, args)
+        .then((rows)=> {
+          if (rows.length > 0)
+            throw new Lawn.HttpError('That ' + rows[0].value + ' is already taken.', 400)
+
+          // Not so worried about invalid gender, just filter it
+          var gender = body.gender
+          if (gender !== 'male' && gender !== 'female')
+            gender = null
+
+          var user = {
+            name: name,
+            username: username,
+            email: email,
+            password: body.password,
+            gender: gender,
+            phone: phone,
+            roles: [ 2 ],
+            facebook_id: facebook_id,
+            address: body.address,
+            image: body.image
+          }
+          console.log('user', user)
+          this.ground.create_update('user', user).run()
+            .then((user)=> {
+              res.send({
+                message: 'User ' + name + ' created successfully.',
+                user: user
+              });
+            })
+        })
+    }
+
+    if (facebook_token !== undefined) {
+      return this.vineyard.bulbs.facebook.get_user_facebook_id(body)
+        .then((facebook_id)=> register(facebook_id))
+    }
+    else {
+      return register()
+    }
   }
 
   static request(options, data = null, secure = false):Promise {
@@ -309,8 +400,11 @@ class Lawn extends Vineyard.Bulb {
       var data, user;
       this.debug('***detected disconnect');
       user = socket.user;
+      if (user)
+        delete this.instance_user_sockets[user.id][socket.id]
+
       delete this.instance_sockets[socket.id];
-      if (user && !this.get_user_socket(user.id)) {
+      if (user && this.get_user_sockets(user.id).length == 0) {
         this.debug(user.id);
         data = user
         if (this.ground.db.active)
@@ -336,7 +430,8 @@ class Lawn extends Vineyard.Bulb {
 
   on_socket(socket, event, user, action) {
     socket.on(event, (request, callback)=> {
-      callback = callback || function() {}
+      callback = callback || function () {
+      }
       try {
         var promise = action(request)
         if (promise && typeof promise.done == 'function') {
@@ -428,6 +523,7 @@ class Lawn extends Vineyard.Bulb {
     console.log('Starting Socket.IO on port ' + port)
 
     var io = this.io = socket_io.listen(port)
+    io.set('log level', 1);
     io.server.on('error', (e)=> {
       if (e.code == 'EADDRINUSE') {
         console.log('Port in use: ' + port + '.')
@@ -590,6 +686,7 @@ class Lawn extends Vineyard.Bulb {
         })
     })
 
+    this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
     this.listen_user_http('/file/:guid.:ext', (req, res, user)=> this.file_download(req, res, user), 'get')
 
     port = port || this.config.ports.http
@@ -900,7 +997,7 @@ module Lawn {
       )
     }
 
-    notify(users, name, data, store = true) {
+    notify(users, name, data, store = true):Promise {
       // With all the deferred action going on, this is sometimes getting hit
       // after the socket server has just shut down, so check if that is the case.
 
@@ -909,7 +1006,7 @@ module Lawn {
 
       if (!store) {
         if (!this.lawn.io)
-          return
+          return when.resolve()
 
         for (var i = 0; i < users.length; ++i) {
           var id = users[i]
@@ -918,26 +1015,28 @@ module Lawn {
         }
       }
 
-      ground.create_update('notification', {
+      return ground.create_update('notification', {
         event: name,
         data: JSON.stringify(data)
       }, this.lawn.config.admin).run()
-        .done((notification)=> {
-          for (var i = 0; i < users.length; ++i) {
-            var id = users[i]
+        .then((notification)=> {
+          var promises = users.map((id)=> {
             console.log('sending-message', name, id, data)
 
             var online = this.lawn.io && this.lawn.io.sockets.clients(id) ? true : false
 
-            ground.create_update('notification_target', {
+            return ground.create_update('notification_target', {
               notification: notification,
               recipient: id,
               received: online
             }, this.lawn.config.admin).run()
+              .then(()=> {
+                if (this.lawn.io)
+                  this.lawn.io.sockets.in('user/' + id).emit(name, data)
+              })
+          })
 
-            if (this.lawn.io)
-              this.lawn.io.sockets.in('user/' + id).emit(name, data)
-          }
+          return when.all(promises)
         })
     }
 

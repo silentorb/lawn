@@ -54,21 +54,24 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.emit_to_users = function (users, name, data) {
-        this.vineyard.bulbs.songbird.notify(users, name, data);
+        return this.vineyard.bulbs.songbird.notify(users, name, data);
     };
 
     Lawn.prototype.notify = function (users, name, data) {
-        this.vineyard.bulbs.songbird.notify(users, name, data);
+        return this.vineyard.bulbs.songbird.notify(users, name, data);
     };
 
-    Lawn.prototype.get_user_socket = function (id) {
-        return this.instance_user_sockets[id];
+    Lawn.prototype.get_user_sockets = function (id) {
+        return MetaHub.map_to_array(this.instance_user_sockets[id], function (x) {
+            return x;
+        }) || [];
     };
 
     Lawn.prototype.initialize_session = function (socket, user) {
         var _this = this;
         this.instance_sockets[socket.id] = socket;
-        this.instance_user_sockets[user.id] = socket;
+        this.instance_user_sockets[user.id] = this.instance_user_sockets[user.id] || [];
+        this.instance_user_sockets[user.id][socket.id] = socket;
         this.ground.db.query('UPDATE users SET online = 1 WHERE id = ' + user.id);
 
         socket.join('user/' + user.id);
@@ -110,9 +113,11 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.start = function () {
-        this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1");
-        this.start_http(this.config.ports.http);
-        this.start_sockets(this.config.ports.websocket);
+        var _this = this;
+        return this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1").then(function () {
+            _this.start_http(_this.config.ports.http);
+            _this.start_sockets(_this.config.ports.websocket);
+        });
     };
 
     Lawn.is_ready_user_object = function (user) {
@@ -182,8 +187,10 @@ var Lawn = (function (_super) {
             }
 
             var user = rows[0];
-            return Lawn.create_session(user, req, _this.ground).then(function () {
-                return _this.send_http_login_success(req, res, user);
+            _this.invoke('user.login', user).then(function () {
+                return Lawn.create_session(user, req, _this.ground).then(function () {
+                    return _this.send_http_login_success(req, res, user);
+                });
             });
         });
     };
@@ -213,6 +220,72 @@ var Lawn = (function (_super) {
                 user: Lawn.format_internal_user(row)
             });
         });
+    };
+
+    Lawn.prototype.register = function (req, res) {
+        var _this = this;
+        var body = req.body, name = body.name, username = body.username, email = body.email, phone = body.phone, facebook_token = body.facebook_token;
+
+        var invalid_characters = /[^A-Za-z\- _0-9]/;
+
+        if (!name)
+            throw new Lawn.HttpError('Request missing name.', 400);
+
+        if (typeof name != 'string' || name.length > 32 || name.match(invalid_characters))
+            throw new Lawn.HttpError('Invalid name.', 400);
+
+        if (typeof username != 'string' || username.length > 32 || name.match(invalid_characters))
+            throw new Lawn.HttpError('Invalid name.', 400);
+
+        if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
+            throw new Lawn.HttpError('Invalid email address.', 400);
+
+        var register = function (facebook_id) {
+            if (typeof facebook_id === "undefined") { facebook_id = undefined; }
+            var args = [body.name];
+            var sql = "SELECT 'name' as value FROM users WHERE name = ?";
+            if (body.email) {
+                sql += "UNION SELECT 'email' as value FROM users WHERE email = ?";
+                args.push(body.email);
+            }
+
+            return _this.ground.db.query(sql, args).then(function (rows) {
+                if (rows.length > 0)
+                    throw new Lawn.HttpError('That ' + rows[0].value + ' is already taken.', 400);
+
+                var gender = body.gender;
+                if (gender !== 'male' && gender !== 'female')
+                    gender = null;
+
+                var user = {
+                    name: name,
+                    username: username,
+                    email: email,
+                    password: body.password,
+                    gender: gender,
+                    phone: phone,
+                    roles: [2],
+                    facebook_id: facebook_id,
+                    address: body.address,
+                    image: body.image
+                };
+                console.log('user', user);
+                _this.ground.create_update('user', user).run().then(function (user) {
+                    res.send({
+                        message: 'User ' + name + ' created successfully.',
+                        user: user
+                    });
+                });
+            });
+        };
+
+        if (facebook_token !== undefined) {
+            return this.vineyard.bulbs.facebook.get_user_facebook_id(body).then(function (facebook_id) {
+                return register(facebook_id);
+            });
+        } else {
+            return register();
+        }
     };
 
     Lawn.request = function (options, data, secure) {
@@ -294,8 +367,11 @@ var Lawn = (function (_super) {
             var data, user;
             _this.debug('***detected disconnect');
             user = socket.user;
+            if (user)
+                delete _this.instance_user_sockets[user.id][socket.id];
+
             delete _this.instance_sockets[socket.id];
-            if (user && !_this.get_user_socket(user.id)) {
+            if (user && _this.get_user_sockets(user.id).length == 0) {
                 _this.debug(user.id);
                 data = user;
                 if (_this.ground.db.active)
@@ -411,6 +487,7 @@ var Lawn = (function (_super) {
         console.log('Starting Socket.IO on port ' + port);
 
         var io = this.io = socket_io.listen(port);
+        io.set('log level', 1);
         io.server.on('error', function (e) {
             if (e.code == 'EADDRINUSE') {
                 console.log('Port in use: ' + port + '.');
@@ -570,6 +647,9 @@ var Lawn = (function (_super) {
             });
         });
 
+        this.listen_public_http('/vineyard/register', function (req, res) {
+            return _this.register(req, res);
+        });
         this.listen_user_http('/file/:guid.:ext', function (req, res, user) {
             return _this.file_download(req, res, user);
         }, 'get');
@@ -851,7 +931,7 @@ var Lawn;
 
             if (!store) {
                 if (!this.lawn.io)
-                    return;
+                    return when.resolve();
 
                 for (var i = 0; i < users.length; ++i) {
                     var id = users[i];
@@ -860,25 +940,26 @@ var Lawn;
                 }
             }
 
-            ground.create_update('notification', {
+            return ground.create_update('notification', {
                 event: name,
                 data: JSON.stringify(data)
-            }, this.lawn.config.admin).run().done(function (notification) {
-                for (var i = 0; i < users.length; ++i) {
-                    var id = users[i];
+            }, this.lawn.config.admin).run().then(function (notification) {
+                var promises = users.map(function (id) {
                     console.log('sending-message', name, id, data);
 
                     var online = _this.lawn.io && _this.lawn.io.sockets.clients(id) ? true : false;
 
-                    ground.create_update('notification_target', {
+                    return ground.create_update('notification_target', {
                         notification: notification,
                         recipient: id,
                         received: online
-                    }, _this.lawn.config.admin).run();
+                    }, _this.lawn.config.admin).run().then(function () {
+                        if (_this.lawn.io)
+                            _this.lawn.io.sockets.in('user/' + id).emit(name, data);
+                    });
+                });
 
-                    if (_this.lawn.io)
-                        _this.lawn.io.sockets.in('user/' + id).emit(name, data);
-                }
+                return when.all(promises);
             });
         };
 

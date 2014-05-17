@@ -235,7 +235,7 @@ var Lawn = (function (_super) {
             return when.reject(new Lawn.HttpError('Invalid name.', 400));
 
         if (typeof username != 'string' || username.length > 32 || name.match(invalid_characters))
-            return when.reject(new Lawn.HttpError('Invalid name.', 400));
+            return when.reject(new Lawn.HttpError('Invalid username.', 400));
 
         if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
             return when.reject(new Lawn.HttpError('Invalid email address.', 400));
@@ -243,7 +243,7 @@ var Lawn = (function (_super) {
         var register = function (facebook_id) {
             if (typeof facebook_id === "undefined") { facebook_id = undefined; }
             var args = [body.name];
-            var sql = "SELECT 'name' as value FROM users WHERE name = ?";
+            var sql = "SELECT 'username' as value FROM users WHERE username = ?";
             if (body.email) {
                 sql += "UNION SELECT 'email' as value FROM users WHERE email = ?";
                 args.push(body.email);

@@ -229,16 +229,16 @@ var Lawn = (function (_super) {
         var invalid_characters = /[^A-Za-z\- _0-9]/;
 
         if (!name)
-            throw new Lawn.HttpError('Request missing name.', 400);
+            return when.reject(new Lawn.HttpError('Request missing name.', 400));
 
         if (typeof name != 'string' || name.length > 32 || name.match(invalid_characters))
-            throw new Lawn.HttpError('Invalid name.', 400);
+            return when.reject(new Lawn.HttpError('Invalid name.', 400));
 
         if (typeof username != 'string' || username.length > 32 || name.match(invalid_characters))
-            throw new Lawn.HttpError('Invalid name.', 400);
+            return when.reject(new Lawn.HttpError('Invalid name.', 400));
 
         if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
-            throw new Lawn.HttpError('Invalid email address.', 400);
+            return when.reject(new Lawn.HttpError('Invalid email address.', 400));
 
         var register = function (facebook_id) {
             if (typeof facebook_id === "undefined") { facebook_id = undefined; }
@@ -251,7 +251,7 @@ var Lawn = (function (_super) {
 
             return _this.ground.db.query(sql, args).then(function (rows) {
                 if (rows.length > 0)
-                    throw new Lawn.HttpError('That ' + rows[0].value + ' is already taken.', 400);
+                    return when.reject(new Lawn.HttpError('That ' + rows[0].value + ' is already taken.', 400));
 
                 var gender = body.gender;
                 if (gender !== 'male' && gender !== 'female')

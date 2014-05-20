@@ -270,10 +270,15 @@ class Lawn extends Vineyard.Bulb {
 
     var register = (facebook_id = undefined)=> {
       var args = [ body.name ]
-      var sql = "SELECT 'username' as value FROM users WHERE username = ?"
+      var sql = "SELECT 'username' as value, FROM users WHERE username = ?"
       if (body.email) {
         sql += "UNION SELECT 'email' as value FROM users WHERE email = ?"
         args.push(body.email)
+      }
+
+      if (facebook_id) {
+        sql += "UNION SELECT 'facebook_id' as value FROM users WHERE facebook_id = ?"
+        args.push(facebook_id)
       }
 
       return this.ground.db.query(sql, args)
@@ -903,7 +908,6 @@ module Lawn {
 
     login(req, res, body):Promise {
       console.log('facebook-login', body)
-      var mysql = require('mysql')
 
       return this.get_user(body)
         .then((user)=> {
@@ -917,7 +921,7 @@ module Lawn {
         .then((facebook_id)=> {
           console.log('fb-user', facebook_id)
           if (!facebook_id) {
-            throw new Lawn.HttpError('Invalid facebook login info.', 400)
+            return when.resolve(new Lawn.HttpError('Invalid facebook login info.', 400))
           }
 
           return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
@@ -925,7 +929,7 @@ module Lawn {
               if (user)
                 return user
 
-              return { status: 300, message: 'That Facebook user id is not yet connect to an account.  Redirect to registration.' }
+              return when.reject({ status: 300, message: 'That Facebook user id is not yet connected to an account.  Redirect to registration.' })
 
 //              var options = {
 //                host: 'graph.facebook.com',

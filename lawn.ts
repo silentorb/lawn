@@ -326,6 +326,29 @@ class Lawn extends Vineyard.Bulb {
 
   link_facebook_user(req, res, user):Promise {
     var body = req.body
+    if (body.facebook_id === null) {
+      if (!user.facebook_id) {
+        res.send({
+          message: "Your account is already not linked to a facebook account.",
+          user: user
+        });
+        return when.resolve()
+      }
+
+      var seed = {
+        id: user.id,
+        facebook_id: null,
+      }
+      user.facebook_id = null
+      console.log('connect-fb-user-detach', seed)
+      return this.ground.create_update('user', seed).run()
+        .then((user)=> {
+          res.send({
+            message: 'Your user accont and facebook account are now detached.',
+            user: user
+          });
+        })
+    }
     return this.vineyard.bulbs.facebook.get_user_facebook_id(body)
       .then((facebook_id)=> {
         var args = [ body.name ]
@@ -349,6 +372,7 @@ class Lawn extends Vineyard.Bulb {
               id: user.id,
               facebook_id: facebook_id,
             }
+            user.facebook_id = facebook_id
             console.log('connect-fb-user', seed)
             this.ground.create_update('user', seed).run()
               .then((user)=> {

@@ -296,6 +296,28 @@ var Lawn = (function (_super) {
     Lawn.prototype.link_facebook_user = function (req, res, user) {
         var _this = this;
         var body = req.body;
+        if (body.facebook_id === null) {
+            if (!user.facebook_id) {
+                res.send({
+                    message: "Your account is already not linked to a facebook account.",
+                    user: user
+                });
+                return when.resolve();
+            }
+
+            var seed = {
+                id: user.id,
+                facebook_id: null
+            };
+            user.facebook_id = null;
+            console.log('connect-fb-user-detach', seed);
+            return this.ground.create_update('user', seed).run().then(function (user) {
+                res.send({
+                    message: 'Your user accont and facebook account are now detached.',
+                    user: user
+                });
+            });
+        }
         return this.vineyard.bulbs.facebook.get_user_facebook_id(body).then(function (facebook_id) {
             var args = [body.name];
             var sql = "SELECT 'username' as value, FROM users WHERE username = ?";
@@ -317,6 +339,7 @@ var Lawn = (function (_super) {
                     id: user.id,
                     facebook_id: facebook_id
                 };
+                user.facebook_id = facebook_id;
                 console.log('connect-fb-user', seed);
                 _this.ground.create_update('user', seed).run().then(function (user) {
                     res.send({

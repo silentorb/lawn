@@ -326,7 +326,7 @@ class Lawn extends Vineyard.Bulb {
 
   link_facebook_user(req, res, user):Promise {
     var body = req.body
-    if (body.facebook_token === null || body.facebook_token === '') {
+    if (body.facebook_id === null || body.facebook_id === '') {
       if (!user.facebook_id) {
         res.send({
           message: "Your account is already not linked to a facebook account.",
@@ -335,14 +335,10 @@ class Lawn extends Vineyard.Bulb {
         return when.resolve()
       }
 
-      var seed = {
-        id: user.id,
-        facebook_id: null,
-      }
+      console.log('connect-fb-user-detach', user)
       user.facebook_id = null
-      console.log('connect-fb-user-detach', seed)
-      return this.ground.create_update('user', seed).run()
-        .then((user)=> {
+      return this.ground.db.query_single("UPDATE users SET facebook_id = NULL WHERE id = ?", [user.id])
+        .then(()=> {
           res.send({
             message: 'Your user accont and facebook account are now detached.',
             user: user
@@ -363,25 +359,26 @@ class Lawn extends Vineyard.Bulb {
           args.push(facebook_id)
         }
 
-        return this.ground.db.query_single("UPDATE users SET facebook_id = NULL WHERE facebook_id = ?", [facebook_id])
-          .then((row)=> {
-            if (row)
-              return when.reject(new Lawn.HttpError('That facebook id is already attached to a user.', 400))
+//        return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
+//          .then((row)=> {
+//            if (row)
+//              return when.reject(new Lawn.HttpError('That facebook id is already attached to a user.', 400))
 
-            var seed = {
-              id: user.id,
-              facebook_id: facebook_id,
-            }
-            user.facebook_id = facebook_id
-            console.log('connect-fb-user', seed)
-            this.ground.create_update('user', seed).run()
-              .then((user)=> {
-                res.send({
-                  message: 'Your user accont is now attached to your facebook account.',
-                  user: user
-                });
-              })
+        var seed = {
+          id: user.id,
+          facebook_id: facebook_id,
+        }
+        user.facebook_id = facebook_id
+        console.log('connect-fb-user', seed)
+        return this.ground.db.query_single("UPDATE users SET facebook_id = NULL WHERE facebook_id = ?", [facebook_id])
+          .then(()=> this.ground.create_update('user', seed).run())
+          .then((user)=> {
+            res.send({
+              message: 'Your user accont is now attached to your facebook account.',
+              user: user
+            });
           })
+//          })
       })
   }
 

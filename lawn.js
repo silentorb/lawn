@@ -296,7 +296,7 @@ var Lawn = (function (_super) {
     Lawn.prototype.link_facebook_user = function (req, res, user) {
         var _this = this;
         var body = req.body;
-        if (body.facebook_id === null) {
+        if (body.facebook_token === null || body.facebook_token === '') {
             if (!user.facebook_id) {
                 res.send({
                     message: "Your account is already not linked to a facebook account.",
@@ -331,7 +331,7 @@ var Lawn = (function (_super) {
                 args.push(facebook_id);
             }
 
-            return _this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id]).then(function (row) {
+            return _this.ground.db.query_single("UPDATE users SET facebook_id = NULL WHERE facebook_id = ?", [facebook_id]).then(function (row) {
                 if (row)
                     return when.reject(new Lawn.HttpError('That facebook id is already attached to a user.', 400));
 

@@ -293,6 +293,41 @@ var Lawn = (function (_super) {
         }
     };
 
+    Lawn.prototype.link_facebook_user = function (req, res, user) {
+        var _this = this;
+        var body = req.body;
+        return this.vineyard.bulbs.facebook.get_user_facebook_id(body).then(function (facebook_id) {
+            var args = [body.name];
+            var sql = "SELECT 'username' as value, FROM users WHERE username = ?";
+            if (body.email) {
+                sql += "UNION SELECT 'email' as value FROM users WHERE email = ?";
+                args.push(body.email);
+            }
+
+            if (facebook_id) {
+                sql += "UNION SELECT 'facebook_id' as value FROM users WHERE facebook_id = ?";
+                args.push(facebook_id);
+            }
+
+            return _this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id]).then(function (row) {
+                if (row)
+                    return when.reject(new Lawn.HttpError('That facebook id is already attached to a user.', 400));
+
+                var seed = {
+                    id: user.id,
+                    facebook_id: facebook_id
+                };
+                console.log('connect-fb-user', seed);
+                _this.ground.create_update('user', seed).run().then(function (user) {
+                    res.send({
+                        message: 'Your user accont is now attached to your facebook account.',
+                        user: user
+                    });
+                });
+            });
+        });
+    };
+
     Lawn.request = function (options, data, secure) {
         if (typeof data === "undefined") { data = null; }
         if (typeof secure === "undefined") { secure = false; }
@@ -658,6 +693,9 @@ var Lawn = (function (_super) {
         this.listen_user_http('/file/:guid.:ext', function (req, res, user) {
             return _this.file_download(req, res, user);
         }, 'get');
+        this.listen_user_http('/vineyard/facebook/link', function (req, res, user) {
+            return _this.link_facebook_user(req, res, user);
+        }, 'post');
 
         port = port || this.config.ports.http;
         console.log('HTTP listening on port ' + port + '.');
@@ -865,7 +903,7 @@ var Lawn;
                     if (user)
                         return user;
 
-                    return when.reject({ status: 300, message: 'That Facebook user id is not yet connected to an account.  Redirect to registration.' });
+                    throw new Lawn.HttpError('That Facebook user id is not yet connected to an account.  Redirect to registration.', 300);
                 });
             });
         };

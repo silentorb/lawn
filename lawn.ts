@@ -74,8 +74,9 @@ class Lawn extends Vineyard.Bulb {
   }
 
   get_user_sockets(id:number):Socket[] {
-    return MetaHub.map_to_array(this.instance_user_sockets[id], (x)=> x )
-      || []  }
+    return MetaHub.map_to_array(this.instance_user_sockets[id], (x)=> x)
+      || []
+  }
 
   initialize_session(socket, user) {
     this.instance_sockets[socket.id] = socket
@@ -321,6 +322,43 @@ class Lawn extends Vineyard.Bulb {
     else {
       return register()
     }
+  }
+
+  link_facebook_user(req, res, user):Promise {
+    var body = req.body
+    return this.vineyard.bulbs.facebook.get_user_facebook_id(body)
+      .then((facebook_id)=> {
+        var args = [ body.name ]
+        var sql = "SELECT 'username' as value, FROM users WHERE username = ?"
+        if (body.email) {
+          sql += "UNION SELECT 'email' as value FROM users WHERE email = ?"
+          args.push(body.email)
+        }
+
+        if (facebook_id) {
+          sql += "UNION SELECT 'facebook_id' as value FROM users WHERE facebook_id = ?"
+          args.push(facebook_id)
+        }
+
+        return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
+          .then((row)=> {
+            if (row)
+              return when.reject(new Lawn.HttpError('That facebook id is already attached to a user.', 400))
+
+            var seed = {
+              id: user.id,
+              facebook_id: facebook_id,
+            }
+            console.log('connect-fb-user', seed)
+            this.ground.create_update('user', seed).run()
+              .then((user)=> {
+                res.send({
+                  message: 'Your user accont is now attached to your facebook account.',
+                  user: user
+                });
+              })
+          })
+      })
   }
 
   static request(options, data = null, secure = false):Promise {
@@ -693,6 +731,7 @@ class Lawn extends Vineyard.Bulb {
 
     this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
     this.listen_user_http('/file/:guid.:ext', (req, res, user)=> this.file_download(req, res, user), 'get')
+    this.listen_user_http('/vineyard/facebook/link', (req, res, user)=> this.link_facebook_user(req, res, user), 'post')
 
     port = port || this.config.ports.http
     console.log('HTTP listening on port ' + port + '.')
@@ -929,7 +968,8 @@ module Lawn {
               if (user)
                 return user
 
-              return when.reject({ status: 300, message: 'That Facebook user id is not yet connected to an account.  Redirect to registration.' })
+              throw new Lawn.HttpError('That Facebook user id is not yet connected to an account.  Redirect to registration.', 300)
+//              return when.reject({ status: 300, message: 'That Facebook user id is not yet connected to an account.  Redirect to registration.' })
 
 //              var options = {
 //                host: 'graph.facebook.com',

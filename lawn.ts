@@ -300,17 +300,24 @@ class Lawn extends Vineyard.Bulb {
             gender: gender,
             phone: phone,
             roles: [ 2 ],
-            facebook_id: facebook_id,
             address: body.address,
             image: body.image
           }
-          console.log('user', user)
+          console.log('user', user, facebook_id)
           this.ground.create_update('user', user).run()
             .then((user)=> {
-              res.send({
-                message: 'User ' + name + ' created successfully.',
-                user: user
-              });
+              var finished = ()=> {
+                user.facebook_id = facebook_id
+                res.send({
+                  message: 'User ' + name + ' created successfully.',
+                  user: user
+                })
+              }
+              if (facebook_id)
+                return this.ground.db.query_single("UPDATE users SET facebook_id = ? WHERE id = ?", [facebook_id, user.id])
+                  .then(finished)
+
+              finished()
             })
         })
     }
@@ -326,7 +333,7 @@ class Lawn extends Vineyard.Bulb {
 
   link_facebook_user(req, res, user):Promise {
     var body = req.body
-    if (body.facebook_id === null || body.facebook_id === '') {
+    if (body.facebook_token === null || body.facebook_token === '') {
       if (!user.facebook_id) {
         res.send({
           message: "Your account is already not linked to a facebook account.",

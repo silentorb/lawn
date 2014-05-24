@@ -270,16 +270,22 @@ var Lawn = (function (_super) {
                     gender: gender,
                     phone: phone,
                     roles: [2],
-                    facebook_id: facebook_id,
                     address: body.address,
                     image: body.image
                 };
-                console.log('user', user);
+                console.log('user', user, facebook_id);
                 _this.ground.create_update('user', user).run().then(function (user) {
-                    res.send({
-                        message: 'User ' + name + ' created successfully.',
-                        user: user
-                    });
+                    var finished = function () {
+                        user.facebook_id = facebook_id;
+                        res.send({
+                            message: 'User ' + name + ' created successfully.',
+                            user: user
+                        });
+                    };
+                    if (facebook_id)
+                        return _this.ground.db.query_single("UPDATE users SET facebook_id = ? WHERE id = ?", [facebook_id, user.id]).then(finished);
+
+                    finished();
                 });
             });
         };
@@ -296,7 +302,7 @@ var Lawn = (function (_super) {
     Lawn.prototype.link_facebook_user = function (req, res, user) {
         var _this = this;
         var body = req.body;
-        if (body.facebook_id === null || body.facebook_id === '') {
+        if (body.facebook_token === null || body.facebook_token === '') {
             if (!user.facebook_id) {
                 res.send({
                     message: "Your account is already not linked to a facebook account.",

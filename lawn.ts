@@ -334,16 +334,16 @@ class Lawn extends Vineyard.Bulb {
   link_facebook_user(req, res, user):Promise {
     var body = req.body
     if (body.facebook_token === null || body.facebook_token === '') {
-      if (!user.facebook_id) {
-        res.send({
-          message: "Your account is already not linked to a facebook account.",
-          user: user
-        });
-        return when.resolve()
-      }
+//      if (!user.facebook_id) {
+//        res.send({
+//          message: "Your account is already not linked to a facebook account.",
+//          user: user
+//        });
+//        return when.resolve()
+//      }
 
       console.log('connect-fb-user-detach', user)
-      user.facebook_id = null
+      delete user.facebook_id
       return this.ground.db.query_single("UPDATE users SET facebook_id = NULL WHERE id = ?", [user.id])
         .then(()=> {
           res.send({

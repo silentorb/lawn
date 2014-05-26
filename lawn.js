@@ -243,14 +243,14 @@ var Lawn = (function (_super) {
         var register = function (facebook_id) {
             if (typeof facebook_id === "undefined") { facebook_id = undefined; }
             var args = [body.name];
-            var sql = "SELECT 'username' as value, FROM users WHERE username = ?";
+            var sql = "SELECT 'username' as value FROM users WHERE username = ?";
             if (body.email) {
-                sql += "UNION SELECT 'email' as value FROM users WHERE email = ?";
+                sql += "\nUNION SELECT 'email' as value FROM users WHERE email = ?";
                 args.push(body.email);
             }
 
             if (facebook_id) {
-                sql += "UNION SELECT 'facebook_id' as value FROM users WHERE facebook_id = ?";
+                sql += "\nUNION SELECT 'facebook_id' as value FROM users WHERE facebook_id = ?";
                 args.push(facebook_id);
             }
 

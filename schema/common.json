@@ -160,7 +160,11 @@
         "received": {
           "type": "bool",
           "default": false
-        }
+        },
+        "viewed": {
+          "type": "bool",
+          "default": false
+        },
       }
     },
     "user": {

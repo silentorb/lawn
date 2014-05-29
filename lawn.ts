@@ -1068,7 +1068,7 @@ module Lawn {
       )
     }
 
-    notify(users, name, data, store = true):Promise {
+    notify(users, name, data, trellis_name:string, store = true):Promise {
       // With all the deferred action going on, this is sometimes getting hit
       // after the socket server has just shut down, so check if that is the case.
 
@@ -1085,11 +1085,8 @@ module Lawn {
           this.lawn.io.sockets.in('user/' + id).emit(name, data)
         }
       }
-
-      return ground.create_update('notification', {
-        event: name,
-        data: JSON.stringify(data)
-      }, this.lawn.config.admin).run()
+      data.event = name
+      return ground.create_update(trellis_name, data, this.lawn.config.admin).run()
         .then((notification)=> {
           var promises = users.map((id)=> {
             console.log('sending-message', name, id, data)

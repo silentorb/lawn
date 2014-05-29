@@ -976,7 +976,7 @@ var Lawn;
             });
         };
 
-        Songbird.prototype.notify = function (users, name, data, store) {
+        Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
             if (typeof store === "undefined") { store = true; }
             var _this = this;
             var ground = this.lawn.ground;
@@ -994,11 +994,8 @@ var Lawn;
                     this.lawn.io.sockets.in('user/' + id).emit(name, data);
                 }
             }
-
-            return ground.create_update('notification', {
-                event: name,
-                data: JSON.stringify(data)
-            }, this.lawn.config.admin).run().then(function (notification) {
+            data.event = name;
+            return ground.create_update(trellis_name, data, this.lawn.config.admin).run().then(function (notification) {
                 var promises = users.map(function (id) {
                     console.log('sending-message', name, id, data);
 

@@ -106,7 +106,7 @@ declare module Lawn {
         public lawn: Lawn;
         public grow(): void;
         public initialize_socket(socket: any, user: any): void;
-        public notify(users: any, name: any, data: any, store?: boolean): Promise;
+        public notify(users: any, name: any, data: any, trellis_name: string, store?: boolean): Promise;
         public notification_receieved(user: any, request: any): Promise;
         public send_pending_notifications(user: any): void;
     }

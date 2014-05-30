@@ -162,9 +162,8 @@
           "default": false
         },
         "viewed": {
-          "type": "bool",
-          "default": false
-        },
+          "type": "datetime"
+        }
       }
     },
     "user": {

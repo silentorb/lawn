@@ -26,6 +26,7 @@ declare class Lawn extends Vineyard.Bulb {
     private static format_public_user(user);
     private static format_internal_user(user);
     public get_public_user(user: any): Promise;
+    public get_schema(req: any, res: any, user: any): void;
     public get_user_from_session(token: string): Promise;
     public http_login(req: any, res: any, body: any): Promise;
     static create_session(user: any, req: any, ground: any): Promise;

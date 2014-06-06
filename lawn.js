@@ -153,6 +153,13 @@ var Lawn = (function (_super) {
         });
     };
 
+    Lawn.prototype.get_schema = function (req, res, user) {
+        var fortress = this.vineyard.bulbs.fortress;
+        var response = fortress.user_has_role(user, 'admin') ? this.ground.export_schema() : {};
+
+        res.send(response);
+    };
+
     Lawn.prototype.get_user_from_session = function (token) {
         var query = this.ground.create_query('session');
         query.add_key_filter(token);
@@ -709,6 +716,9 @@ var Lawn = (function (_super) {
         this.listen_user_http('/vineyard/facebook/link', function (req, res, user) {
             return _this.link_facebook_user(req, res, user);
         }, 'post');
+        this.listen_user_http('/vineyard/schema', function (req, res, user) {
+            return _this.get_schema(req, res, user);
+        }, 'get');
 
         port = port || this.config.ports.http;
         console.log('HTTP listening on port ' + port + '.');
@@ -1002,7 +1012,7 @@ var Lawn;
                     var online = _this.lawn.io && _this.lawn.io.sockets.clients(id) ? true : false;
 
                     return ground.create_update('notification_target', {
-                        notification: notification,
+                        notification: notification.id,
                         recipient: id,
                         received: online
                     }, _this.lawn.config.admin).run().then(function () {

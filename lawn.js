@@ -57,8 +57,8 @@ var Lawn = (function (_super) {
         return this.vineyard.bulbs.songbird.notify(users, name, data);
     };
 
-    Lawn.prototype.notify = function (users, name, data) {
-        return this.vineyard.bulbs.songbird.notify(users, name, data);
+    Lawn.prototype.notify = function (users, name, data, trellis_name) {
+        return this.vineyard.bulbs.songbird.notify(users, name, data, trellis_name);
     };
 
     Lawn.prototype.get_user_sockets = function (id) {
@@ -618,20 +618,23 @@ var Lawn = (function (_super) {
 
         app.use(express.bodyParser({ keepExtensions: true, uploadDir: "tmp" }));
         app.use(express.cookieParser());
-        if (!this.config.cookie_secret)
-            throw new Error('lawn.cookie_secret must be set!');
-
-        app.use(express.session({ secret: this.config.cookie_secret }));
 
         if (typeof this.config.mysql_session_store == 'object') {
-            var Session_Store = require('express-mysql-session');
+            var MySQL_Session_Store = require('express-mysql-session');
             var storage_config = this.config.mysql_session_store;
+
+            console.log('using mysql sessions store: ', storage_config.db);
 
             app.use(express.session({
                 key: storage_config.key,
                 secret: storage_config.secret,
-                store: new Session_Store(storage_config.db)
+                store: new MySQL_Session_Store(storage_config.db)
             }));
+        } else {
+            if (!this.config.cookie_secret)
+                throw new Error('lawn.cookie_secret must be set!');
+
+            app.use(express.session({ secret: this.config.cookie_secret }));
         }
 
         if (typeof this.config.log_file === 'string') {

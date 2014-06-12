@@ -826,7 +826,10 @@ var Lawn;
                 if (vineyard.bulbs.lawn.debug_mode)
                     console.log('error', error.stack);
 
-                socket.emit('error', response);
+                if (callback)
+                    callback(response);
+                else
+                    socket.emit('error', response);
             });
         };
 

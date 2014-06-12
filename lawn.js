@@ -500,7 +500,7 @@ var Lawn = (function (_super) {
         };
 
         var fortress = this.vineyard.bulbs.fortress;
-        if (user && fortress && fortress.user_has_role(user, 'admin')) {
+        if (user && fortress && fortress.user_has_role(user, 'dev')) {
             response.message = error.message || "Server Error";
             response['stack'] = error.stack;
             response['details'] = error.details;
@@ -816,7 +816,7 @@ var Lawn;
                     message: status == 500 ? "Server Error" : error.message
                 };
 
-                if (fortress.user_has_role(user, 'admin')) {
+                if (fortress.user_has_role(user, 'dev')) {
                     response.message = error.message || "Server Error";
                     response['stack'] = error.stack;
                     details:

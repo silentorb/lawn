@@ -130,6 +130,9 @@ class Lawn extends Vineyard.Bulb {
   }
 
   start() {
+    if (!this.vineyard.bulbs.fortress)
+      console.log("WARNING: Fortress is not loaded.  Server will be running with minimal security.")
+
     return this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1")
       .then(()=> {
         this.start_http(this.config.ports.http);
@@ -457,12 +460,9 @@ class Lawn extends Vineyard.Bulb {
         }
       },
       (error)=> {
-        if (this.debug_mode) {
-          console.log('error', error.message)
-          console.log('stack', error.stack)
-        }
+        console.log('error', error.message, error.stack)
 
-        socket.emit('error', {
+        socket.emit('socket login error', {
           'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
         })
       }
@@ -501,6 +501,7 @@ class Lawn extends Vineyard.Bulb {
       .done(()=> {
       }, (error)=> {
         error = error || {}
+        console.log('public http error:', error.message, error.stack)
         var status = error.status || 500
         var message = status == 500 ? 'Server Error' : error.message
         res.json(status || 500, { message: message })
@@ -865,10 +866,18 @@ module Lawn {
   }
 
   export class Irrigation {
+
+    static prepare_fortress(fortress, user):Promise {
+      if (!fortress)
+        return when.resolve()
+
+      return fortress.get_roles(user)
+    }
+
     static process(method:string, request:Ground.External_Query_Source, user:Vineyard.IUser, vineyard:Vineyard, socket, callback):Promise {
       var fortress = vineyard.bulbs.fortress
       var action = Irrigation[method]
-      return fortress.get_roles(user)
+      return Irrigation.prepare_fortress(fortress, user)
         .then(()=> action(request, user, vineyard.ground, vineyard))
         .then((result)=> {
           result.status = 200
@@ -925,13 +934,18 @@ module Lawn {
       query.extend(request)
 
       var fortress = vineyard.bulbs.fortress
-      return fortress.query_access(user, query)
-        .then((result)=> {
-          if (result.access)
-            return query.run()
-          else
-            throw new Authorization_Error('You are not authorized to perform this query', result)
-        })
+      if (fortress) {
+        return fortress.query_access(user, query)
+          .then((result)=> {
+            if (result.access)
+              return query.run()
+            else
+              throw new Authorization_Error('You are not authorized to perform this query', result)
+          })
+      }
+      else {
+        return query.run()
+      }
     }
 
     static update(request:Update_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
@@ -946,20 +960,30 @@ module Lawn {
         throw new HttpError('Request requires an objects array', 400);
 
       var fortress = vineyard.bulbs.fortress
-      return fortress.update_access(user, updates)
-        .then((result)=> {
-          if (result.access) {
-            var update_promises = updates.map((update) => update.run())
-            return when.all(update_promises)
-              .then((objects)=> {
-                return {
-                  objects: objects
-                }
-              })
-          }
-          else
-            throw new Authorization_Error('You are not authorized to perform this update', result)
-        })
+      if (fortress) {
+        return fortress.update_access(user, updates)
+          .then((result)=> {
+            if (result.access) {
+              var update_promises = updates.map((update) => update.run())
+              return when.all(update_promises)
+                .then((objects)=> {
+                  return {
+                    objects: objects
+                  }
+                })
+            }
+            else
+              throw new Authorization_Error('You are not authorized to perform this update', result)
+          })
+      }
+      else {
+        return when.all(updates.map((update) => update.run()))
+          .then((objects)=> {
+            return {
+              objects: objects
+            }
+          })
+      }
     }
   }
 
@@ -996,7 +1020,7 @@ module Lawn {
       return this.get_user(body)
         .then((user)=> {
           return Lawn.create_session(user, req, this.ground)
-            .then(()=> this.lawn.send_http_login_success(req, res, user))
+            .then(()=> this.vineyard.bulbs.lawn.send_http_login_success(req, res, user))
         })
     }
 
@@ -1093,7 +1117,7 @@ module Lawn {
       var ground = this.lawn.ground
       var users = users.map((x)=> typeof x == 'object' ? x.id : x)
 
-      if (!store) {
+      if (!store || !trellis_name) {
         if (!this.lawn.io)
           return when.resolve()
 
@@ -1102,7 +1126,9 @@ module Lawn {
           console.log('sending-message', name, id, data)
           this.lawn.io.sockets.in('user/' + id).emit(name, data)
         }
+        return when.resolve()
       }
+
       data.event = name
       return ground.create_update(trellis_name, data, this.lawn.config.admin).run()
         .then((notification)=> {

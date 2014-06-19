@@ -91,6 +91,7 @@ declare module Lawn {
         constructor(message: string, details: any);
     }
     class Irrigation {
+        static prepare_fortress(fortress: any, user: any): Promise;
         static process(method: string, request: Ground.External_Query_Source, user: Vineyard.IUser, vineyard: Vineyard, socket: any, callback: any): Promise;
         static query(request: Ground.External_Query_Source, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
         static update(request: Update_Request, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;

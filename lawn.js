@@ -114,6 +114,9 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.start = function () {
         var _this = this;
+        if (!this.vineyard.bulbs.fortress)
+            console.log("WARNING: Fortress is not loaded.  Server will be running with minimal security.");
+
         return this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1").then(function () {
             _this.start_http(_this.config.ports.http);
             _this.start_sockets(_this.config.ports.websocket);
@@ -404,12 +407,9 @@ var Lawn = (function (_super) {
                 callback(user);
             }
         }, function (error) {
-            if (_this.debug_mode) {
-                console.log('error', error.message);
-                console.log('stack', error.stack);
-            }
+            console.log('error', error.message, error.stack);
 
-            socket.emit('error', {
+            socket.emit('socket login error', {
                 'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
             });
         }).done();
@@ -446,6 +446,7 @@ var Lawn = (function (_super) {
         action(req, res).done(function () {
         }, function (error) {
             error = error || {};
+            console.log('public http error:', error.message, error.stack);
             var status = error.status || 500;
             var message = status == 500 ? 'Server Error' : error.message;
             res.json(status || 500, { message: message });
@@ -788,10 +789,17 @@ var Lawn;
     var Irrigation = (function () {
         function Irrigation() {
         }
+        Irrigation.prepare_fortress = function (fortress, user) {
+            if (!fortress)
+                return when.resolve();
+
+            return fortress.get_roles(user);
+        };
+
         Irrigation.process = function (method, request, user, vineyard, socket, callback) {
             var fortress = vineyard.bulbs.fortress;
             var action = Irrigation[method];
-            return fortress.get_roles(user).then(function () {
+            return Irrigation.prepare_fortress(fortress, user).then(function () {
                 return action(request, user, vineyard.ground, vineyard);
             }).then(function (result) {
                 result.status = 200;
@@ -843,12 +851,16 @@ var Lawn;
             query.extend(request);
 
             var fortress = vineyard.bulbs.fortress;
-            return fortress.query_access(user, query).then(function (result) {
-                if (result.access)
-                    return query.run();
-                else
-                    throw new Authorization_Error('You are not authorized to perform this query', result);
-            });
+            if (fortress) {
+                return fortress.query_access(user, query).then(function (result) {
+                    if (result.access)
+                        return query.run();
+                    else
+                        throw new Authorization_Error('You are not authorized to perform this query', result);
+                });
+            } else {
+                return query.run();
+            }
         };
 
         Irrigation.update = function (request, user, ground, vineyard) {
@@ -863,19 +875,29 @@ var Lawn;
                 throw new HttpError('Request requires an objects array', 400);
 
             var fortress = vineyard.bulbs.fortress;
-            return fortress.update_access(user, updates).then(function (result) {
-                if (result.access) {
-                    var update_promises = updates.map(function (update) {
-                        return update.run();
-                    });
-                    return when.all(update_promises).then(function (objects) {
-                        return {
-                            objects: objects
-                        };
-                    });
-                } else
-                    throw new Authorization_Error('You are not authorized to perform this update', result);
-            });
+            if (fortress) {
+                return fortress.update_access(user, updates).then(function (result) {
+                    if (result.access) {
+                        var update_promises = updates.map(function (update) {
+                            return update.run();
+                        });
+                        return when.all(update_promises).then(function (objects) {
+                            return {
+                                objects: objects
+                            };
+                        });
+                    } else
+                        throw new Authorization_Error('You are not authorized to perform this update', result);
+                });
+            } else {
+                return when.all(updates.map(function (update) {
+                    return update.run();
+                })).then(function (objects) {
+                    return {
+                        objects: objects
+                    };
+                });
+            }
         };
         return Irrigation;
     })();
@@ -915,7 +937,7 @@ var Lawn;
 
             return this.get_user(body).then(function (user) {
                 return Lawn.create_session(user, req, _this.ground).then(function () {
-                    return _this.lawn.send_http_login_success(req, res, user);
+                    return _this.vineyard.bulbs.lawn.send_http_login_success(req, res, user);
                 });
             });
         };
@@ -1000,7 +1022,7 @@ var Lawn;
                 return typeof x == 'object' ? x.id : x;
             });
 
-            if (!store) {
+            if (!store || !trellis_name) {
                 if (!this.lawn.io)
                     return when.resolve();
 
@@ -1009,7 +1031,9 @@ var Lawn;
                     console.log('sending-message', name, id, data);
                     this.lawn.io.sockets.in('user/' + id).emit(name, data);
                 }
+                return when.resolve();
             }
+
             data.event = name;
             return ground.create_update(trellis_name, data, this.lawn.config.admin).run().then(function (notification) {
                 var promises = users.map(function (id) {

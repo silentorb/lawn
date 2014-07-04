@@ -177,7 +177,7 @@ class Lawn extends Vineyard.Bulb {
 
   get_schema(req, res, user) {
     var fortress = this.vineyard.bulbs.fortress
-    var response = fortress.user_has_role(user, 'admin')
+    var response = !fortress || fortress.user_has_role(user, 'admin')
       ? this.ground.export_schema()
       : {}
 

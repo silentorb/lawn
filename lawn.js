@@ -158,7 +158,7 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.get_schema = function (req, res, user) {
         var fortress = this.vineyard.bulbs.fortress;
-        var response = fortress.user_has_role(user, 'admin') ? this.ground.export_schema() : {};
+        var response = !fortress || fortress.user_has_role(user, 'admin') ? this.ground.export_schema() : {};
 
         res.send(response);
     };

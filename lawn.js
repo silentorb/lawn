@@ -191,10 +191,15 @@ var Lawn = (function (_super) {
             return this.vineyard.bulbs.facebook.login(req, res, body);
 
         console.log('login', body);
-        return this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
-            if (rows.length == 0) {
+        return this.ground.db.query("SELECT id, name, status FROM users WHERE username = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
+            if (rows.length == 0)
                 throw new Lawn.HttpError('Invalid login info.', 400);
-            }
+
+            if (rows[0].status === 0)
+                throw new Lawn.HttpError('This account has been disabled.', 403);
+
+            if (rows[0].status === 2)
+                throw new Lawn.HttpError('This account is awaiting email verification.', 403);
 
             var user = rows[0];
             _this.invoke('user.login', user).then(function () {
@@ -711,9 +716,6 @@ var Lawn = (function (_super) {
             });
         });
 
-        this.listen_public_http('/vineyard/register', function (req, res) {
-            return _this.register(req, res);
-        });
         this.listen_user_http('/file/:guid.:ext', function (req, res, user) {
             return _this.file_download(req, res, user);
         }, 'get');

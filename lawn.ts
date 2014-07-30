@@ -213,11 +213,16 @@ class Lawn extends Vineyard.Bulb {
       return this.vineyard.bulbs.facebook.login(req, res, body)
 
     console.log('login', body)
-    return this.ground.db.query("SELECT id, name FROM users WHERE username = ? AND password = ?", [body.name, body.pass])
+    return this.ground.db.query("SELECT id, name, status FROM users WHERE username = ? AND password = ?", [body.name, body.pass])
       .then((rows)=> {
-        if (rows.length == 0) {
+        if (rows.length == 0)
           throw new Lawn.HttpError('Invalid login info.', 400)
-        }
+
+        if (rows[0].status === 0)
+          throw new Lawn.HttpError('This account has been disabled.', 403)
+
+        if (rows[0].status === 2)
+          throw new Lawn.HttpError('This account is awaiting email verification.', 403)
 
         var user = rows[0];
         this.invoke('user.login', user)
@@ -771,7 +776,7 @@ class Lawn extends Vineyard.Bulb {
         })
     })
 
-    this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
+//    this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
     this.listen_user_http('/file/:guid.:ext', (req, res, user)=> this.file_download(req, res, user), 'get')
     this.listen_user_http('/vineyard/facebook/link', (req, res, user)=> this.link_facebook_user(req, res, user), 'post')
     this.listen_user_http('/vineyard/schema', (req, res, user)=> this.get_schema(req, res, user), 'get')

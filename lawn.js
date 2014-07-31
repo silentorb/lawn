@@ -211,7 +211,10 @@ var Lawn = (function (_super) {
     };
 
     Lawn.create_session = function (user, req, ground) {
-        var ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress;
+        var ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.socket.remoteAddress;
+
+        if (!ip && req.connection.socket)
+            ip = req.connection.socket.remoteAddress;
 
         var session = [
             user.id,

@@ -231,8 +231,10 @@ class Lawn extends Vineyard.Bulb {
   static create_session(user, req, ground):Promise {
     var ip = req.headers['x-forwarded-for'] ||
       req.connection.remoteAddress ||
-      req.socket.remoteAddress ||
-      req.connection.socket.remoteAddress
+      req.socket.remoteAddress
+
+    if (!ip && req.connection.socket)
+      ip = req.connection.socket.remoteAddress
 
     var session = [
       user.id,

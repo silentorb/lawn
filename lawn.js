@@ -202,7 +202,7 @@ var Lawn = (function (_super) {
                 throw new Lawn.HttpError('This account is awaiting email verification.', 403);
 
             var user = rows[0];
-            _this.invoke('user.login', user).then(function () {
+            _this.invoke('user.login', user, body).then(function () {
                 return Lawn.create_session(user, req, _this.ground).then(function () {
                     return _this.send_http_login_success(req, res, user);
                 });

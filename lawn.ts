@@ -225,7 +225,7 @@ class Lawn extends Vineyard.Bulb {
           throw new Lawn.HttpError('This account is awaiting email verification.', 403)
 
         var user = rows[0];
-        this.invoke('user.login', user)
+        this.invoke('user.login', user, body)
           .then(()=> {
             return Lawn.create_session(user, req, this.ground)
               .then(()=> this.send_http_login_success(req, res, user))

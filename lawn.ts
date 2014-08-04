@@ -817,6 +817,14 @@ class Lawn extends Vineyard.Bulb {
 
     console.log('Lawn is stopped.')
   }
+
+  public user_is_online(id:number) {
+    if (!this.io)
+      return false
+
+    var room = this.io.sockets.clients(id)
+    return room && room.length > 0
+  }
 }
 
 module Lawn {
@@ -1099,8 +1107,14 @@ module Lawn {
     }
   }
 
+  export interface Songbird_Method {
+    send:(user, message:string)=> Promise
+  }
+
+
   export class Songbird extends Vineyard.Bulb {
     lawn:Lawn
+    fallback_bulbs:Songbird_Method[] = []
 
     grow() {
       this.lawn = this.vineyard.bulbs.lawn
@@ -1117,10 +1131,11 @@ module Lawn {
       )
     }
 
-    notify(users, name, data, trellis_name:string, store = true):Promise {
-      // With all the deferred action going on, this is sometimes getting hit
-      // after the socket server has just shut down, so check if that is the case.
+    public add_fallback(fallback) {
+      this.fallback_bulbs.push(fallback)
+    }
 
+    notify(users, name, data, trellis_name:string, store = true):Promise {
       var ground = this.lawn.ground
       var users = users.map((x)=> typeof x == 'object' ? x.id : x)
 
@@ -1128,12 +1143,21 @@ module Lawn {
         if (!this.lawn.io)
           return when.resolve()
 
+        var promises = []
         for (var i = 0; i < users.length; ++i) {
           var id = users[i]
           console.log('sending-message', name, id, data)
+          var online = this.lawn.user_is_online(id)
+          console.log('online', online)
           this.lawn.io.sockets.in('user/' + id).emit(name, data)
+          if (!online) {
+            console.log('fallback count', this.fallback_bulbs.length)
+            for (var x = 0; x < this.fallback_bulbs.length; ++x) {
+              promises.push(this.fallback_bulbs[x].send({ id: id }, data))
+            }
+          }
         }
-        return when.resolve()
+        return when.all(promises)
       }
 
       data.event = name
@@ -1142,7 +1166,7 @@ module Lawn {
           var promises = users.map((id)=> {
             console.log('sending-message', name, id, data)
 
-            var online = this.lawn.io && this.lawn.io.sockets.clients(id) ? true : false
+            var online = this.lawn.user_is_online(id)
 
             return ground.create_update('notification_target', {
               notification: notification.id,
@@ -1150,8 +1174,10 @@ module Lawn {
               received: online
             }, this.lawn.config.admin).run()
               .then(()=> {
-                if (this.lawn.io)
-                  this.lawn.io.sockets.in('user/' + id).emit(name, data)
+                this.lawn.io.sockets.in('user/' + id).emit(name, data)
+                return online
+                  ? when.resolve()
+                  : when.all(this.fallback_bulbs.map((b)=> b.send({ id: id}, data)))
               })
           })
 

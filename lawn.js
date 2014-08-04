@@ -763,6 +763,14 @@ var Lawn = (function (_super) {
 
         console.log('Lawn is stopped.');
     };
+
+    Lawn.prototype.user_is_online = function (id) {
+        if (!this.io)
+            return false;
+
+        var room = this.io.sockets.clients(id);
+        return room && room.length > 0;
+    };
     Lawn.public_user_properties = ['id', 'name', 'username', 'email'];
     Lawn.internal_user_properties = Lawn.public_user_properties.concat(['roles']);
     return Lawn;
@@ -999,6 +1007,7 @@ var Lawn;
         __extends(Songbird, _super);
         function Songbird() {
             _super.apply(this, arguments);
+            this.fallback_bulbs = [];
         }
         Songbird.prototype.grow = function () {
             var _this = this;
@@ -1019,6 +1028,10 @@ var Lawn;
             });
         };
 
+        Songbird.prototype.add_fallback = function (fallback) {
+            this.fallback_bulbs.push(fallback);
+        };
+
         Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
             if (typeof store === "undefined") { store = true; }
             var _this = this;
@@ -1031,12 +1044,21 @@ var Lawn;
                 if (!this.lawn.io)
                     return when.resolve();
 
+                var promises = [];
                 for (var i = 0; i < users.length; ++i) {
                     var id = users[i];
                     console.log('sending-message', name, id, data);
+                    var online = this.lawn.user_is_online(id);
+                    console.log('online', online);
                     this.lawn.io.sockets.in('user/' + id).emit(name, data);
+                    if (!online) {
+                        console.log('fallback count', this.fallback_bulbs.length);
+                        for (var x = 0; x < this.fallback_bulbs.length; ++x) {
+                            promises.push(this.fallback_bulbs[x].send({ id: id }, data));
+                        }
+                    }
                 }
-                return when.resolve();
+                return when.all(promises);
             }
 
             data.event = name;
@@ -1044,15 +1066,17 @@ var Lawn;
                 var promises = users.map(function (id) {
                     console.log('sending-message', name, id, data);
 
-                    var online = _this.lawn.io && _this.lawn.io.sockets.clients(id) ? true : false;
+                    var online = _this.lawn.user_is_online(id);
 
                     return ground.create_update('notification_target', {
                         notification: notification.id,
                         recipient: id,
                         received: online
                     }, _this.lawn.config.admin).run().then(function () {
-                        if (_this.lawn.io)
-                            _this.lawn.io.sockets.in('user/' + id).emit(name, data);
+                        _this.lawn.io.sockets.in('user/' + id).emit(name, data);
+                        return online ? when.resolve() : when.all(_this.fallback_bulbs.map(function (b) {
+                            return b.send({ id: id }, data);
+                        }));
                     });
                 });
 

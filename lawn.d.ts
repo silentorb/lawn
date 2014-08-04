@@ -51,6 +51,7 @@ declare class Lawn extends Vineyard.Bulb {
     private static file_exists(filepath);
     public start_http(port: any): void;
     public stop(): void;
+    public user_is_online(id: number): boolean;
 }
 declare module Lawn {
     interface Session_Store_DB {
@@ -104,10 +105,15 @@ declare module Lawn {
         public get_user(body: any): Promise;
         public get_user_facebook_id(body: any): Promise;
     }
+    interface Songbird_Method {
+        send: (user: any, message: string) => Promise;
+    }
     class Songbird extends Vineyard.Bulb {
         public lawn: Lawn;
+        public fallback_bulbs: Songbird_Method[];
         public grow(): void;
         public initialize_socket(socket: any, user: any): void;
+        public add_fallback(fallback: any): void;
         public notify(users: any, name: any, data: any, trellis_name: string, store?: boolean): Promise;
         public notification_receieved(user: any, request: any): Promise;
         public send_pending_notifications(user: any): void;

@@ -352,6 +352,32 @@
           "type": "string"
         }
       }
+    },
+    "forgot_password_request": {
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "user": {
+          "type": "reference",
+          "trellis": "user"
+        },
+        "key": {
+          "type": "string"
+        },
+        "created": {
+          "type": "datetime",
+          "insert": "created"
+        },
+        "modified": {
+          "type": "datetime",
+          "insert": "modified"
+        },
+        "used": {
+          "type": "bool",
+          "default": false
+        }
+      }
     }
   }
 }

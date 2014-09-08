@@ -16,6 +16,8 @@ var Lawn = (function (_super) {
         this.instance_sockets = {};
         this.instance_user_sockets = {};
         this.debug_mode = false;
+        this.mail = null;
+        this.password_reset_template = null;
     }
     Lawn.prototype.grow = function () {
         var _this = this;
@@ -37,6 +39,14 @@ var Lawn = (function (_super) {
         this.listen(ground, 'user.queried', function (user, query) {
             return _this.query_user(user, query);
         });
+
+        if (this.config.mail)
+            this.mail = new Lawn.Mail(this.config.mail);
+
+        if (this.config.password_reset_template) {
+            var fs = require('fs');
+            this.password_reset_template = fs.readFileSync(this.config.password_reset_template, 'ascii');
+        }
     };
 
     Lawn.authorization = function (handshakeData, callback) {
@@ -69,6 +79,7 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.initialize_session = function (socket, user) {
         var _this = this;
+        socket.user = user;
         this.instance_sockets[socket.id] = socket;
         this.instance_user_sockets[user.id] = this.instance_user_sockets[user.id] || [];
         this.instance_user_sockets[user.id][socket.id] = socket;
@@ -190,10 +201,14 @@ var Lawn = (function (_super) {
         if (typeof body.facebook_token === 'string')
             return this.vineyard.bulbs.facebook.login(req, res, body);
 
+        var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?";
         console.log('login', body);
-        return this.ground.db.query("SELECT id, name, status FROM users WHERE username = ? AND password = ?", [body.name, body.pass]).then(function (rows) {
-            if (rows.length == 0)
+        return this.ground.db.query(sql, [body.name, body.pass]).then(function (rows) {
+            if (rows.length == 0) {
+                var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?";
+                _this.ground.db.query(sql, [body.name, body.pass]);
                 throw new Lawn.HttpError('Invalid login info.', 400);
+            }
 
             if (rows[0].status === 0)
                 throw new Lawn.HttpError('This account has been disabled.', 403);
@@ -206,6 +221,70 @@ var Lawn = (function (_super) {
                 return Lawn.create_session(user, req, _this.ground).then(function () {
                     return _this.send_http_login_success(req, res, user);
                 });
+            });
+        });
+    };
+
+    Lawn.prototype.check_password_reset_configuration = function (req, res, body) {
+        if (!this.config.site || !this.config.site.name || !this.password_reset_template) {
+            res.send({
+                message: "This site is not configured to support resetting passwords.",
+                key: "vineyard-password-not-configured"
+            });
+
+            return when.reject();
+        }
+        return when.resolve();
+    };
+
+    Lawn.prototype.password_reset_request = function (req, res, body) {
+        var _this = this;
+        return this.check_password_reset_configuration(req, res, body).then(function () {
+            return _this.ground.db.query_single("SELECT * FROM users WHERE username = ?");
+        }).then(function (user) {
+            if (!user) {
+                res.json(400, {
+                    message: "There is no user with that username.",
+                    key: "vineyard-password-reset-user-not-found"
+                });
+                return when.resolve();
+            }
+            if (!user.email) {
+                res.json(400, {
+                    message: "An email address is required to reset your password, and your account does not have an email address.",
+                    key: "vineyard-password-reset-no-email-address"
+                });
+                return when.resolve();
+            }
+            var sql = "SELECT * FROM password_reset_requests" + "\nJOIN users ON users.id = password_reset_requests.id AND users.username = ?" + "\nWHERE password_reset_requests.modified > UNIX_TIMESTAMP() - 12 * 60 * 60" + "\nORDER BY used DESC";
+            return _this.ground.db.query_single(sql, [body.username]).then(function (row) {
+                if (row) {
+                    if (row.used) {
+                        res.send({
+                            message: "Your password was recently reset.  You must wait 12 hours before resetting it again.",
+                            key: "vineyard-password-reset-recently"
+                        });
+                    } else {
+                        res.send({
+                            message: "An email with a temporary password was recently sent to you.",
+                            key: "vineyard-password-reset-already-sent"
+                        });
+                    }
+                } else {
+                    var email = {
+                        title: _this.config.site.name + "Password Reset",
+                        content: _this.password_reset_template
+                    };
+                    return _this.invoke('compose-password-reset-email', email).then(function () {
+                        return _this.mail.send(user.email, email.title, email.content).then(function () {
+                            res.send({
+                                message: "A tempory password was sent to your email.",
+                                key: "vineyard-password-reset-sent"
+                            });
+                        });
+                    });
+                }
+                return when.resolve();
             });
         });
     };
@@ -234,7 +313,7 @@ var Lawn = (function (_super) {
         query.run_single().then(function (row) {
             res.send({
                 token: req.sessionID,
-                message: 'Login successful2',
+                message: 'Login successful',
                 user: Lawn.format_internal_user(row)
             });
         });
@@ -439,7 +518,7 @@ var Lawn = (function (_super) {
                 delete _this.instance_user_sockets[user.id][socket.id];
 
             delete _this.instance_sockets[socket.id];
-            if (user && _this.get_user_sockets(user.id).length == 0) {
+            if (user && !_this.user_is_online(user.id)) {
                 _this.debug(user.id);
                 data = user;
                 if (_this.ground.db.active)
@@ -668,6 +747,10 @@ var Lawn = (function (_super) {
                 res.send(result);
             });
         });
+        this.listen_public_http('/vineyard/password-reset', function (req, res) {
+            return _this.password_reset_request(req, res, req.body);
+        });
+
         this.listen_user_http('/vineyard/update', function (req, res, user) {
             console.log('server recieved query request.');
             return Lawn.Irrigation.update(req.body, user, _this.ground, _this.vineyard).then(function (result) {
@@ -1015,6 +1098,11 @@ var Lawn;
             this.listen(this.lawn, 'socket.add', function (socket, user) {
                 return _this.initialize_socket(socket, user);
             });
+            if (this.config.template_file) {
+                var fs = require('fs');
+                var json = fs.readFileSync(this.config.template_file, 'ascii');
+                this.templates = JSON.parse(json);
+            }
         };
 
         Songbird.prototype.initialize_socket = function (socket, user) {
@@ -1032,6 +1120,13 @@ var Lawn;
             this.fallback_bulbs.push(fallback);
         };
 
+        Songbird.prototype.format_message = function (name, data) {
+            if (!this.templates[name])
+                throw new Error("Could not find a message template for " + name + ".");
+
+            return this.templates[name].join("");
+        };
+
         Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
             if (typeof store === "undefined") { store = true; }
             var _this = this;
@@ -1039,6 +1134,7 @@ var Lawn;
             var users = users.map(function (x) {
                 return typeof x == 'object' ? x.id : x;
             });
+            var message;
 
             if (!store || !trellis_name) {
                 if (!this.lawn.io)
@@ -1053,8 +1149,9 @@ var Lawn;
                     this.lawn.io.sockets.in('user/' + id).emit(name, data);
                     if (!online) {
                         console.log('fallback count', this.fallback_bulbs.length);
+                        message = this.format_message(name, data);
                         for (var x = 0; x < this.fallback_bulbs.length; ++x) {
-                            promises.push(this.fallback_bulbs[x].send({ id: id }, data));
+                            promises.push(this.fallback_bulbs[x].send({ id: id }, message, data, 0));
                         }
                     }
                 }
@@ -1074,8 +1171,12 @@ var Lawn;
                         received: online
                     }, _this.lawn.config.admin).run().then(function () {
                         _this.lawn.io.sockets.in('user/' + id).emit(name, data);
-                        return online ? when.resolve() : when.all(_this.fallback_bulbs.map(function (b) {
-                            return b.send({ id: id }, data);
+                        if (online)
+                            return when.resolve();
+
+                        message = _this.format_message(name, data);
+                        return when.all(_this.fallback_bulbs.map(function (b) {
+                            return b.send({ id: id }, message, data, 0);
                         }));
                     });
                 });
@@ -1121,6 +1222,37 @@ var Lawn;
         return Songbird;
     })(Vineyard.Bulb);
     Lawn.Songbird = Songbird;
+
+    var Mail = (function () {
+        function Mail(config) {
+            this.config = config;
+            var nodemailer = require('nodemailer');
+            var ses_transport = require('ses_transport');
+            this.transporter = nodemailer.createTransport(ses_transport(config));
+        }
+        Mail.prototype.send = function (to, subject, text) {
+            var def = when.defer();
+            console.log(this.config.address);
+            this.transporter.sendMail({
+                from: this.config.address,
+                to: to,
+                subject: subject,
+                html: text
+            }, function (error, info) {
+                if (error) {
+                    console.log('error', error);
+                    def.reject(error);
+                } else {
+                    def.resolve(info);
+                    console.log('info', info);
+                }
+            });
+
+            return def.promise;
+        };
+        return Mail;
+    })();
+    Lawn.Mail = Mail;
 })(Lawn || (Lawn = {}));
 
 module.exports = Lawn;

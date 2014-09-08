@@ -6,11 +6,12 @@ declare class Lawn extends Vineyard.Bulb {
     public instance_sockets: {};
     public instance_user_sockets: {};
     public app: any;
-    public fs: any;
     public config: Lawn.Config;
     public redis_client: any;
     public http: any;
     public debug_mode: boolean;
+    public mail: Lawn.Mail;
+    public password_reset_template: string;
     public grow(): void;
     static authorization(handshakeData: any, callback: any): any;
     public debug(...args: any[]): void;
@@ -29,6 +30,8 @@ declare class Lawn extends Vineyard.Bulb {
     public get_schema(req: any, res: any, user: any): void;
     public get_user_from_session(token: string): Promise;
     public http_login(req: any, res: any, body: any): Promise;
+    public check_password_reset_configuration(req: any, res: any, body: any): Promise;
+    public password_reset_request(req: any, res: any, body: any): Promise;
     static create_session(user: any, req: any, ground: any): Promise;
     public send_http_login_success(req: any, res: any, user: any): void;
     public register(req: any, res: any): Promise;
@@ -75,6 +78,9 @@ declare module Lawn {
         admin: any;
         file_path?: string;
         mysql_session_store?: Session_Store_Config;
+        mail?: Mail_Config;
+        password_reset_template?: string;
+        site: any;
     }
     interface Update_Request {
         objects: any[];
@@ -106,17 +112,31 @@ declare module Lawn {
         public get_user_facebook_id(body: any): Promise;
     }
     interface Songbird_Method {
-        send: (user: any, message: string) => Promise;
+        send: (user: any, message: string, data: any, badge: any) => Promise;
     }
     class Songbird extends Vineyard.Bulb {
         public lawn: Lawn;
         public fallback_bulbs: Songbird_Method[];
+        public templates: any;
         public grow(): void;
         public initialize_socket(socket: any, user: any): void;
         public add_fallback(fallback: any): void;
+        public format_message(name: any, data: any): string;
         public notify(users: any, name: any, data: any, trellis_name: string, store?: boolean): Promise;
         public notification_receieved(user: any, request: any): Promise;
         public send_pending_notifications(user: any): void;
+    }
+    interface Mail_Config {
+        transport: Mail_Transport_Config;
+        address: string;
+    }
+    interface Mail_Transport_Config {
+    }
+    class Mail {
+        public transporter: any;
+        public config: Mail_Config;
+        constructor(config: Mail_Config);
+        public send(to: any, subject: string, text: string): Promise;
     }
 }
 declare module "vineyard-lawn" { export = Lawn }

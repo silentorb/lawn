@@ -26,11 +26,12 @@ class Lawn extends Vineyard.Bulb {
   instance_sockets = {}
   instance_user_sockets = {}
   app
-  fs
   config:Lawn.Config
   redis_client
   http
   debug_mode:boolean = false
+  mail:Lawn.Mail = null
+  password_reset_template:string = null
 
   grow() {
     var ground = this.ground
@@ -50,6 +51,14 @@ class Lawn extends Vineyard.Bulb {
     }
 
     this.listen(ground, 'user.queried', (user, query:Ground.Query_Builder)=> this.query_user(user, query))
+
+    if (this.config.mail)
+      this.mail = new Lawn.Mail(this.config.mail)
+
+    if (this.config.password_reset_template) {
+      var fs = require('fs')
+      this.password_reset_template = fs.readFileSync(this.config.password_reset_template, 'ascii')
+    }
   }
 
   static
@@ -79,6 +88,7 @@ class Lawn extends Vineyard.Bulb {
   }
 
   initialize_session(socket, user) {
+    socket.user = user
     this.instance_sockets[socket.id] = socket
     this.instance_user_sockets[user.id] = this.instance_user_sockets[user.id] || []
     this.instance_user_sockets[user.id][socket.id] = socket
@@ -212,11 +222,15 @@ class Lawn extends Vineyard.Bulb {
     if (typeof body.facebook_token === 'string')
       return this.vineyard.bulbs.facebook.login(req, res, body)
 
+    var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?"
     console.log('login', body)
-    return this.ground.db.query("SELECT id, name, status FROM users WHERE username = ? AND password = ?", [body.name, body.pass])
+    return this.ground.db.query(sql, [body.name, body.pass])
       .then((rows)=> {
-        if (rows.length == 0)
+        if (rows.length == 0) {
+          var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?"
+          this.ground.db.query(sql, [body.name, body.pass])
           throw new Lawn.HttpError('Invalid login info.', 400)
+        }
 
         if (rows[0].status === 0)
           throw new Lawn.HttpError('This account has been disabled.', 403)
@@ -232,6 +246,101 @@ class Lawn extends Vineyard.Bulb {
           })
       })
   }
+
+  check_password_reset_configuration(req, res, body):Promise {
+    if (!this.config.site || !this.config.site.name || !this.password_reset_template) {
+      res.send({
+        message: "This site is not configured to support resetting passwords.",
+        key: "vineyard-password-not-configured"
+      })
+
+      return when.reject()
+    }
+    return when.resolve()
+  }
+
+  password_reset_request(req, res, body):Promise {
+    return this.check_password_reset_configuration(req, res, body)
+      .then(() => this.ground.db.query_single("SELECT * FROM users WHERE username = ?"))
+      .then((user) => {
+        if (!user) {
+          res.json(400, {
+            message: "There is no user with that username.",
+            key: "vineyard-password-reset-user-not-found"
+          })
+          return when.resolve()
+        }
+        if (!user.email) {
+          res.json(400, {
+            message: "An email address is required to reset your password, and your account does not have an email address.",
+            key: "vineyard-password-reset-no-email-address"
+          })
+          return when.resolve()
+        }
+        var sql = "SELECT * FROM password_reset_requests"
+          + "\nJOIN users ON users.id = password_reset_requests.id AND users.username = ?"
+          + "\nWHERE password_reset_requests.modified > UNIX_TIMESTAMP() - 12 * 60 * 60"
+          + "\nORDER BY used DESC"
+        return this.ground.db.query_single(sql, [body.username])
+          .then((row)=> {
+            if (row) {
+              if (row.used) {
+                res.send({
+                  message: "Your password was recently reset.  You must wait 12 hours before resetting it again.",
+                  key: "vineyard-password-reset-recently"
+                })
+              }
+              else {
+                res.send({
+                  message: "An email with a temporary password was recently sent to you.",
+                  key: "vineyard-password-reset-already-sent"
+                })
+              }
+            }
+            else {
+              var email = {
+                title: this.config.site.name + "Password Reset",
+                content: this.password_reset_template
+              }
+              return this.invoke('compose-password-reset-email', email)
+                .then(()=> {
+                  return this.mail.send(user.email, email.title, email.content)
+                    .then(()=> {
+                      res.send({
+                        message: "A tempory password was sent to your email.",
+                        key: "vineyard-password-reset-sent"
+                      })
+                    })
+                })
+            }
+            return when.resolve()
+          })
+      })
+  }
+
+//  password_reset_execute(req, res, body):Promise {
+//    function generate_password() {
+//      var range = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+//      var result =''
+//      for (i = 0; i < 8; ++i) {
+//        result += range[Math.floor(Math.random() * range.length)]
+//      }
+//
+//      return result
+//    }
+//
+//    var sql ="SELECT * FROM password_reset_requests WHERE key = ? AND used = 0"
+//    return this.check_password_reset_configuration(req, res, body)
+//      .then(() => this.ground.db.query_single(sql,[body.key]))
+//      .then((request) => {
+//        if (!request) {
+//          res.send({
+//            message: "That is not a valid password reset token."
+//            key: "vineyard-password-reset-not-found"
+//          })
+//        }
+//      })
+//  }
 
   static create_session(user, req, ground):Promise {
     var ip = req.headers['x-forwarded-for'] ||
@@ -259,7 +368,7 @@ class Lawn extends Vineyard.Bulb {
       .then((row)=> {
         res.send({
           token: req.sessionID,
-          message: 'Login successful2',
+          message: 'Login successful',
           user: Lawn.format_internal_user(row)
         })
       })
@@ -490,7 +599,7 @@ class Lawn extends Vineyard.Bulb {
         delete this.instance_user_sockets[user.id][socket.id]
 
       delete this.instance_sockets[socket.id];
-      if (user && this.get_user_sockets(user.id).length == 0) {
+      if (user && !this.user_is_online(user.id)) {
         this.debug(user.id);
         data = user
         if (this.ground.db.active)
@@ -724,6 +833,9 @@ class Lawn extends Vineyard.Bulb {
           res.send(result)
         })
     })
+    this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_request(req, res, req.body))
+//    this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_execute(req, res, req.query), 'get')
+
     this.listen_user_http('/vineyard/update', (req, res, user)=> {
       console.log('server recieved query request.')
       return Lawn.Irrigation.update(req.body, user, this.ground, this.vineyard)
@@ -852,6 +964,9 @@ module Lawn {
     admin
     file_path?:string
     mysql_session_store?:Session_Store_Config
+    mail?:Lawn.Mail_Config
+    password_reset_template?:string
+    site
   }
 
   export interface Update_Request {
@@ -1108,17 +1223,22 @@ module Lawn {
   }
 
   export interface Songbird_Method {
-    send:(user, message:string)=> Promise
+    send:(user, message:string, data, badge)=> Promise
   }
-
 
   export class Songbird extends Vineyard.Bulb {
     lawn:Lawn
     fallback_bulbs:Songbird_Method[] = []
+    templates
 
     grow() {
       this.lawn = this.vineyard.bulbs.lawn
       this.listen(this.lawn, 'socket.add', (socket, user)=> this.initialize_socket(socket, user))
+      if (this.config.template_file) {
+        var fs = require('fs')
+        var json = fs.readFileSync(this.config.template_file, 'ascii')
+        this.templates = JSON.parse(json)
+      }
     }
 
     initialize_socket(socket, user) {
@@ -1135,9 +1255,17 @@ module Lawn {
       this.fallback_bulbs.push(fallback)
     }
 
+    format_message(name, data):string {
+      if (!this.templates[name])
+        throw new Error("Could not find a message template for " + name + ".")
+
+      return this.templates[name].join("")
+    }
+
     notify(users, name, data, trellis_name:string, store = true):Promise {
       var ground = this.lawn.ground
       var users = users.map((x)=> typeof x == 'object' ? x.id : x)
+      var message
 
       if (!store || !trellis_name) {
         if (!this.lawn.io)
@@ -1152,8 +1280,9 @@ module Lawn {
           this.lawn.io.sockets.in('user/' + id).emit(name, data)
           if (!online) {
             console.log('fallback count', this.fallback_bulbs.length)
+            message = this.format_message(name, data)
             for (var x = 0; x < this.fallback_bulbs.length; ++x) {
-              promises.push(this.fallback_bulbs[x].send({ id: id }, data))
+              promises.push(this.fallback_bulbs[x].send({ id: id }, message, data, 0))
             }
           }
         }
@@ -1175,9 +1304,11 @@ module Lawn {
             }, this.lawn.config.admin).run()
               .then(()=> {
                 this.lawn.io.sockets.in('user/' + id).emit(name, data)
-                return online
-                  ? when.resolve()
-                  : when.all(this.fallback_bulbs.map((b)=> b.send({ id: id}, data)))
+                if (online)
+                  return when.resolve()
+
+                message = this.format_message(name, data)
+                return when.all(this.fallback_bulbs.map((b)=> b.send({ id: id}, message, data, 0)))
               })
           })
 
@@ -1222,6 +1353,52 @@ module Lawn {
         })
     }
   }
+
+
+  export interface Mail_Config {
+    transport:Mail_Transport_Config
+    address:string
+  }
+
+  export interface Mail_Transport_Config {
+
+  }
+
+  export class Mail {
+    transporter
+    config:Mail_Config
+
+    constructor(config:Mail_Config) {
+      this.config = config
+      var nodemailer = require('nodemailer')
+      var ses_transport = require('ses_transport')
+      this.transporter = nodemailer.createTransport(ses_transport(config))
+    }
+
+    send(to, subject:string, text:string):Promise {
+//    console.log('Sending email to ', to)
+      var def = when.defer()
+      console.log(this.config.address)
+      this.transporter.sendMail({
+        from: this.config.address,
+        to: to,
+        subject: subject,
+        html: text
+      }, function (error, info) {
+        if (error) {
+          console.log('error', error)
+          def.reject(error)
+        }
+        else {
+          def.resolve(info)
+          console.log('info', info)
+        }
+      })
+
+      return def.promise
+    }
+  }
+
 }
 
 export = Lawn

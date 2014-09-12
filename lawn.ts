@@ -1354,7 +1354,6 @@ module Lawn {
     }
   }
 
-
   export interface Mail_Config {
     transport:Mail_Transport_Config
     address:string

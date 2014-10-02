@@ -1055,9 +1055,9 @@ module Lawn {
       return crypto.createHash('md5').update(name).digest('hex');
     }
 
-    static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+    static query_with_cache(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
       if (vineyard.bulbs['lawn'].config.cache_queries !== true) {
-        return Irrigation.query_old(request, user, ground, vineyard)
+        return Irrigation.query(request, user, ground, vineyard)
       }
 
       if (!request)
@@ -1100,29 +1100,54 @@ module Lawn {
       }
     }
 
-    static query_old(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+    static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
       if (!request)
         throw new HttpError('Empty request', 400)
 
       var trellis = ground.sanitize_trellis_argument(request.trellis);
       var query = new Ground.Query_Builder(trellis);
-
       query.extend(request)
 
-      var query_result = { queries: 0 }
       var fortress = vineyard.bulbs.fortress
       if (fortress) {
         return fortress.query_access(user, query)
           .then((result)=> {
             if (result.access)
-              return query.run(query_result)
+              return Irrigation.run_query(query, user, vineyard, request)
             else
               throw new Authorization_Error('You are not authorized to perform this query', result)
           })
       }
       else {
-        return query.run(query_result)
+        return Irrigation.run_query(query, user, vineyard, request)
       }
+    }
+
+    static run_query(query:Ground.Query_Builder, user:Vineyard.IUser, vineyard:Vineyard, request:Ground.External_Query_Source):Promise {
+      var query_result = { queries: 0 }
+      var start = Date.now()
+      return query.run(query_result)
+      .then((result)=> {
+          result.query_stats.duration = Math.abs(Date.now() - start)
+          if (vineyard.bulbs['lawn'].config.log_queries === true) {
+            var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count)"
+            + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?)"
+
+            // This may cause some problems with the automated tests,
+            // but the response does not wait for this log to be stored.
+            // I'm doing it this way because the whole point of this log is performance timing
+            // and I don't want it to bloat the perceived external request time.
+            query.ground.db.query(sql, [
+              user.id,
+              query.trellis.name,
+              JSON.stringify(request),
+              result.query_stats.duration,
+              result.query_stats.count,
+              result.objects.length
+            ])
+          }
+          return result
+        })
     }
 
     static update(request:Update_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {

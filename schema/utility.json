@@ -1,47 +1,36 @@
 {
   "tables": {
-    "query_cache": {
-      "name": "query_cache"
+    "query_log": {
+      "name": "query_log"
     }
   },
   "trellises": {
-    "query_cache": {
-      "primary_key": "hash",
-      "properties": {
-        "key": {
-          "type": "string"
-        },
-        "hash": {
-          "type": "string"
-        },
-        "data": {
-          "type": "text"
-        },
-        "timestamp": {
-          "type": "datetime"
-        },
-        "expires": {
-          "type": "datetime"
-        }
-      }
-    },
     "query_log": {
       "properties": {
         "id": {
           "type": "int"
         },
-        "key": {
-          "type": "string"
+        "user": {
+          "type": "reference",
+          "trellis": "user"
         },
-        "hash": {
+        "trellis": {
           "type": "string"
         },
         "timestamp": {
           "type": "datetime"
         },
-        "user": {
-          "type": "reference",
-          "trellis": "user"
+        "request": {
+          "type": "text"
+        },
+        "duration": {
+          "type": "int"
+        },
+        "query_count": {
+          "type": "int"
+        },
+        "object_count": {
+          "type": "int"
         }
       }
     }

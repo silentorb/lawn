@@ -942,9 +942,9 @@ var Lawn;
             return crypto.createHash('md5').update(name).digest('hex');
         };
 
-        Irrigation.query = function (request, user, ground, vineyard) {
+        Irrigation.query_with_cache = function (request, user, ground, vineyard) {
             if (vineyard.bulbs['lawn'].config.cache_queries !== true) {
-                return Irrigation.query_old(request, user, ground, vineyard);
+                return Irrigation.query(request, user, ground, vineyard);
             }
 
             if (!request)
@@ -982,27 +982,46 @@ var Lawn;
             }
         };
 
-        Irrigation.query_old = function (request, user, ground, vineyard) {
+        Irrigation.query = function (request, user, ground, vineyard) {
             if (!request)
                 throw new HttpError('Empty request', 400);
 
             var trellis = ground.sanitize_trellis_argument(request.trellis);
             var query = new Ground.Query_Builder(trellis);
-
             query.extend(request);
 
-            var query_result = { queries: 0 };
             var fortress = vineyard.bulbs.fortress;
             if (fortress) {
                 return fortress.query_access(user, query).then(function (result) {
                     if (result.access)
-                        return query.run(query_result);
+                        return Irrigation.run_query(query, user, vineyard, request);
                     else
                         throw new Authorization_Error('You are not authorized to perform this query', result);
                 });
             } else {
-                return query.run(query_result);
+                return Irrigation.run_query(query, user, vineyard, request);
             }
+        };
+
+        Irrigation.run_query = function (query, user, vineyard, request) {
+            var query_result = { queries: 0 };
+            var start = Date.now();
+            return query.run(query_result).then(function (result) {
+                result.query_stats.duration = Math.abs(Date.now() - start);
+                if (vineyard.bulbs['lawn'].config.log_queries === true) {
+                    var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count)" + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?)";
+
+                    query.ground.db.query(sql, [
+                        user.id,
+                        query.trellis.name,
+                        JSON.stringify(request),
+                        result.query_stats.duration,
+                        result.query_stats.count,
+                        result.objects.length
+                    ]);
+                }
+                return result;
+            });
         };
 
         Irrigation.update = function (request, user, ground, vineyard) {

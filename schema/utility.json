@@ -17,20 +17,23 @@
         "trellis": {
           "type": "string"
         },
+        "query_count": {
+          "type": "int"
+        },
+        "duration": {
+          "type": "int"
+        },
+        "object_count": {
+          "type": "int"
+        },
+        "version": {
+          "type": "string"
+        },
         "timestamp": {
           "type": "datetime"
         },
         "request": {
           "type": "text"
-        },
-        "duration": {
-          "type": "int"
-        },
-        "query_count": {
-          "type": "int"
-        },
-        "object_count": {
-          "type": "int"
         }
       }
     }

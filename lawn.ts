@@ -1124,14 +1124,15 @@ module Lawn {
     }
 
     static run_query(query:Ground.Query_Builder, user:Vineyard.IUser, vineyard:Vineyard, request:Ground.External_Query_Source):Promise {
+      var lawn = vineyard.bulbs['lawn']
       var query_result = { queries: 0 }
       var start = Date.now()
       return query.run(query_result)
       .then((result)=> {
           result.query_stats.duration = Math.abs(Date.now() - start)
-          if (vineyard.bulbs['lawn'].config.log_queries === true) {
-            var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count)"
-            + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?)"
+          if (lawn.config.log_queries === true) {
+            var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count, version)"
+            + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?, ?)"
 
             // This may cause some problems with the automated tests,
             // but the response does not wait for this log to be stored.
@@ -1143,7 +1144,8 @@ module Lawn {
               JSON.stringify(request),
               result.query_stats.duration,
               result.query_stats.count,
-              result.objects.length
+              result.objects.length,
+              request.version || lawn.config.default_version || "?"
             ])
           }
           return result

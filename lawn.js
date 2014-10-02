@@ -1004,12 +1004,13 @@ var Lawn;
         };
 
         Irrigation.run_query = function (query, user, vineyard, request) {
+            var lawn = vineyard.bulbs['lawn'];
             var query_result = { queries: 0 };
             var start = Date.now();
             return query.run(query_result).then(function (result) {
                 result.query_stats.duration = Math.abs(Date.now() - start);
-                if (vineyard.bulbs['lawn'].config.log_queries === true) {
-                    var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count)" + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?)";
+                if (lawn.config.log_queries === true) {
+                    var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count, version)" + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?, ?)";
 
                     query.ground.db.query(sql, [
                         user.id,
@@ -1017,7 +1018,8 @@ var Lawn;
                         JSON.stringify(request),
                         result.query_stats.duration,
                         result.query_stats.count,
-                        result.objects.length
+                        result.objects.length,
+                        request.version || lawn.config.default_version || "?"
                     ]);
                 }
                 return result;

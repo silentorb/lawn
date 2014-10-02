@@ -180,7 +180,6 @@ var Lawn = (function (_super) {
         query.add_subquery('user').add_subquery('roles');
 
         return query.run_single().then(function (session) {
-            console.log('session', session);
             if (!session)
                 throw new Lawn.HttpError('Session not found.', 401);
 
@@ -937,7 +936,53 @@ var Lawn;
             });
         };
 
+        Irrigation.generate_hash = function (input) {
+            var crypto = require('crypto');
+            var name = 'braitsch';
+            return crypto.createHash('md5').update(name).digest('hex');
+        };
+
         Irrigation.query = function (request, user, ground, vineyard) {
+            if (vineyard.bulbs['lawn'].config.cache_queries !== true) {
+                return Irrigation.query_old(request, user, ground, vineyard);
+            }
+
+            if (!request)
+                throw new HttpError('Empty request', 400);
+
+            var trellis = ground.sanitize_trellis_argument(request.trellis);
+            if (typeof request.key == 'string' && typeof request.expires == 'number' && request.expires > 0) {
+                var hash = Irrigation.generate_hash(JSON.stringify(request));
+                console.log('hash', hash);
+                var sql = "SELECT * FROM query_cache WHERE (expires = 0 || expires > UNIX_TIMESTAMP()) AND hash = ?";
+                return ground.db.query_single(sql, [hash]).then(function (row) {
+                    console.log('row', row);
+                    if (row) {
+                        console.log('using query cache for:', request.name, hash);
+                        return JSON.parse(row.data);
+                    } else {
+                        var query = new Ground.Query_Builder(trellis);
+                        query.extend(request);
+                        return query.run().then(function (result) {
+                            var sql1 = "REPLACE INTO query_cache (`key`, `hash`, `data`, `timestamp`, `expires`)" + " VALUES (?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + ?)";
+
+                            var sql2 = "INSERT INTO query_logs (`key`, `hash`, `timestamp`, `user`)" + " VALUES (?, ?, UNIX_TIMESTAMP(), ?)";
+                            return ground.db.query(sql1, [request.key, hash, JSON.stringify(result), request.expires * 1000]).then(function () {
+                                return ground.db.query(sql2, [request.key, hash, user.id]);
+                            }).then(function () {
+                                return result;
+                            });
+                        });
+                    }
+                });
+            } else {
+                var query = new Ground.Query_Builder(trellis);
+                query.extend(request);
+                return query.run();
+            }
+        };
+
+        Irrigation.query_old = function (request, user, ground, vineyard) {
             if (!request)
                 throw new HttpError('Empty request', 400);
 

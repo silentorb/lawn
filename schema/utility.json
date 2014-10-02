@@ -1,0 +1,49 @@
+{
+  "tables": {
+    "query_cache": {
+      "name": "query_cache"
+    }
+  },
+  "trellises": {
+    "query_cache": {
+      "primary_key": "hash",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string"
+        },
+        "data": {
+          "type": "text"
+        },
+        "timestamp": {
+          "type": "datetime"
+        },
+        "expires": {
+          "type": "datetime"
+        }
+      }
+    },
+    "query_log": {
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "key": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "datetime"
+        },
+        "user": {
+          "type": "reference",
+          "trellis": "user"
+        }
+      }
+    }
+  }
+}

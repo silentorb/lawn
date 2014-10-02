@@ -62,7 +62,7 @@ class Lawn extends Vineyard.Bulb {
   }
 
   static
-    authorization(handshakeData, callback) {
+  authorization(handshakeData, callback) {
     return callback(null, true);
   }
 
@@ -84,7 +84,7 @@ class Lawn extends Vineyard.Bulb {
 
   get_user_sockets(id:number):Socket[] {
     return MetaHub.map_to_array(this.instance_user_sockets[id], (x)=> x)
-      || []
+    || []
   }
 
   initialize_session(socket, user) {
@@ -150,8 +150,8 @@ class Lawn extends Vineyard.Bulb {
       })
   }
 
-  static public_user_properties = [ 'id', 'name', 'username', 'email' ]
-  static internal_user_properties = Lawn.public_user_properties.concat([ 'roles' ])
+  static public_user_properties = ['id', 'name', 'username', 'email']
+  static internal_user_properties = Lawn.public_user_properties.concat(['roles'])
 
   private static is_ready_user_object(user) {
     var properties = Lawn.public_user_properties
@@ -201,7 +201,7 @@ class Lawn extends Vineyard.Bulb {
 
     return query.run_single()
       .then((session) => {
-        console.log('session', session)
+        //console.log('session', session)
         if (!session)
           throw new Lawn.HttpError('Session not found.', 401)
 
@@ -398,7 +398,7 @@ class Lawn extends Vineyard.Bulb {
       return when.reject(new Lawn.HttpError('Invalid email address.', 400))
 
     var register = (facebook_id = undefined)=> {
-      var args = [ body.name ]
+      var args = [body.name]
       var sql = "SELECT 'username' as value FROM users WHERE username = ?"
       if (body.email) {
         sql += "\nUNION SELECT 'email' as value FROM users WHERE email = ?"
@@ -427,7 +427,7 @@ class Lawn extends Vineyard.Bulb {
             password: body.password,
             gender: gender,
             phone: phone,
-            roles: [ 2 ],
+            roles: [2],
             address: body.address,
             image: body.image
           }
@@ -482,7 +482,7 @@ class Lawn extends Vineyard.Bulb {
     }
     return this.vineyard.bulbs.facebook.get_user_facebook_id(body)
       .then((facebook_id)=> {
-        var args = [ body.name ]
+        var args = [body.name]
         var sql = "SELECT 'username' as value, FROM users WHERE username = ?"
         if (body.email) {
           sql += "UNION SELECT 'email' as value FROM users WHERE email = ?"
@@ -534,7 +534,7 @@ class Lawn extends Vineyard.Bulb {
         res.on('data', function (data) {
           if (res.headers['content-type'] &&
             (res.headers['content-type'].indexOf('json') > -1
-              || res.headers['content-type'].indexOf('javascript') > -1))
+            || res.headers['content-type'].indexOf('javascript') > -1))
             res.content = JSON.parse(data)
           else
             res.content = data
@@ -560,7 +560,7 @@ class Lawn extends Vineyard.Bulb {
   login(data, socket:ISocket, callback) {
     console.log('message2', data);
     if (!data.token) {
-      socket.emit('error', { message: 'Missing token.' })
+      socket.emit('error', {message: 'Missing token.'})
     }
 
     var query = this.ground.create_query('session')
@@ -620,7 +620,7 @@ class Lawn extends Vineyard.Bulb {
         console.log('public http error:', error.message, error.stack)
         var status = error.status || 500
         var message = status == 500 ? 'Server Error' : error.message
-        res.json(status || 500, { message: message })
+        res.json(status || 500, {message: message})
       })
   }
 
@@ -640,7 +640,7 @@ class Lawn extends Vineyard.Bulb {
           )
         }
         else {
-          callback({ status: 200 })
+          callback({status: 200})
         }
       }
       catch (err) {
@@ -735,11 +735,7 @@ class Lawn extends Vineyard.Bulb {
 
     if (this.config.use_redis) {
       console.log('using redis')
-      var RedisStore = require('socket.io/lib/stores/redis')
-        , redis = require("socket.io/node_modules/redis")
-        , pub = redis.createClient()
-        , sub = redis.createClient()
-        , client = redis.createClient()
+      var RedisStore = require('socket.io/lib/stores/redis'), redis = require("socket.io/node_modules/redis"), pub = redis.createClient(), sub = redis.createClient(), client = redis.createClient()
 
       io.set('store', new RedisStore({
         redisPub: pub, redisSub: sub, redisClient: client
@@ -791,7 +787,7 @@ class Lawn extends Vineyard.Bulb {
     var express = require('express');
     var app = this.app = express();
 
-    app.use(express.bodyParser({ keepExtensions: true, uploadDir: "tmp"}));
+    app.use(express.bodyParser({keepExtensions: true, uploadDir: "tmp"}));
     app.use(express.cookieParser());
 
     if (typeof this.config.mysql_session_store == 'object') {
@@ -1053,8 +1049,58 @@ module Lawn {
         })
     }
 
+    static generate_hash(input:string):string {
+      var crypto = require('crypto');
+      var name = 'braitsch';
+      return crypto.createHash('md5').update(name).digest('hex');
+    }
 
     static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      if (vineyard.bulbs['lawn'].config.cache_queries !== true) {
+        return Irrigation.query_old(request, user, ground, vineyard)
+      }
+
+      if (!request)
+        throw new HttpError('Empty request', 400)
+
+      var trellis = ground.sanitize_trellis_argument(request.trellis);
+      if (typeof request.key == 'string' && typeof request.expires == 'number' && request.expires > 0) {
+        var hash = Irrigation.generate_hash(JSON.stringify(request))
+        console.log('hash', hash)
+        var sql = "SELECT * FROM query_cache WHERE (expires = 0 || expires > UNIX_TIMESTAMP()) AND hash = ?"
+        return ground.db.query_single(sql, [hash])
+          .then((row)=> {
+            console.log('row', row)
+            if (row) {
+              console.log('using query cache for:', request.name, hash)
+              return JSON.parse(row.data)
+            }
+            else {
+              var query = new Ground.Query_Builder(trellis);
+              query.extend(request)
+              return query.run()
+                .then((result)=> {
+                  var sql1 = "REPLACE INTO query_cache (`key`, `hash`, `data`, `timestamp`, `expires`)"
+                    + " VALUES (?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + ?)"
+
+                  var sql2 = "INSERT INTO query_logs (`key`, `hash`, `timestamp`, `user`)"
+                    + " VALUES (?, ?, UNIX_TIMESTAMP(), ?)"
+                  return ground.db.query(sql1, [request.key, hash, JSON.stringify(result), request.expires * 1000])
+                    .then(()=> ground.db.query(sql2, [request.key, hash, user.id]))
+                    .then(()=> result)
+                })
+
+            }
+          })
+      }
+      else {
+        var query = new Ground.Query_Builder(trellis);
+        query.extend(request)
+        return query.run()
+      }
+    }
+
+    static query_old(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
       if (!request)
         throw new HttpError('Empty request', 400)
 
@@ -1193,9 +1239,9 @@ module Lawn {
       var options = {
         host: 'graph.facebook.com',
         path: '/oauth/access_token?'
-          + 'client_id=' + this.config['app'].id
-          + '&client_secret=' + this.config['app'].secret
-          + '&grant_type=client_credentials',
+        + 'client_id=' + this.config['app'].id
+        + '&client_secret=' + this.config['app'].secret
+        + '&grant_type=client_credentials',
         method: 'GET'
       }
 
@@ -1208,8 +1254,8 @@ module Lawn {
           var post = {
             host: 'graph.facebook.com',
             path: '/debug_token?'
-              + 'input_token=' + body.facebook_token
-              + '&access_token=' + access_token,
+            + 'input_token=' + body.facebook_token
+            + '&access_token=' + access_token,
             method: 'GET'
           }
 
@@ -1282,7 +1328,7 @@ module Lawn {
             console.log('fallback count', this.fallback_bulbs.length)
             message = this.format_message(name, data)
             for (var x = 0; x < this.fallback_bulbs.length; ++x) {
-              promises.push(this.fallback_bulbs[x].send({ id: id }, message, data, 0))
+              promises.push(this.fallback_bulbs[x].send({id: id}, message, data, 0))
             }
           }
         }
@@ -1308,7 +1354,7 @@ module Lawn {
                   return when.resolve()
 
                 message = this.format_message(name, data)
-                return when.all(this.fallback_bulbs.map((b)=> b.send({ id: id}, message, data, 0)))
+                return when.all(this.fallback_bulbs.map((b)=> b.send({id: id}, message, data, 0)))
               })
           })
 
@@ -1334,7 +1380,7 @@ module Lawn {
             received: true
           })
             .then((object)=> {
-              return { message: "Notification is now marked as received."}
+              return {message: "Notification is now marked as received."}
             })
         })
     }

@@ -1109,18 +1109,19 @@ module Lawn {
 
       query.extend(request)
 
+      var query_result = { queries: 0 }
       var fortress = vineyard.bulbs.fortress
       if (fortress) {
         return fortress.query_access(user, query)
           .then((result)=> {
             if (result.access)
-              return query.run()
+              return query.run(query_result)
             else
               throw new Authorization_Error('You are not authorized to perform this query', result)
           })
       }
       else {
-        return query.run()
+        return query.run(query_result)
       }
     }
 

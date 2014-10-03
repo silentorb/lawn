@@ -1125,11 +1125,21 @@ module Lawn {
 
     static run_query(query:Ground.Query_Builder, user:Vineyard.IUser, vineyard:Vineyard, request:Ground.External_Query_Source):Promise {
       var lawn = vineyard.bulbs['lawn']
-      var query_result = { queries: 0 }
+      var query_result:Ground.Query_Result = { query_count: 0 }
+      var fortress = vineyard.bulbs.fortress
+      if (request.return_sql === true && (!fortress || fortress.user_has_role(user, 'dev')))
+        query_result.return_sql = true;
+
       var start = Date.now()
       return query.run(query_result)
       .then((result)=> {
           result.query_stats.duration = Math.abs(Date.now() - start)
+          if (result.sql && !vineyard.ground.log_queries)
+            console.log('\nservice-query:', "\n" + result.sql)
+
+          if (result.total === undefined)
+            result.total = result.objects.length
+
           if (lawn.config.log_queries === true) {
             var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count, version)"
             + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?, ?)"

@@ -30,8 +30,10 @@ declare class Lawn extends Vineyard.Bulb {
     public get_schema(req: any, res: any, user: any): void;
     public get_user_from_session(token: string): Promise;
     public http_login(req: any, res: any, body: any): Promise;
+    public is_configured_for_password_reset(): boolean;
     public check_password_reset_configuration(req: any, res: any, body: any): Promise;
     public password_reset_request(req: any, res: any, body: any): Promise;
+    public create_password_reset_entry(user_id: any): Promise;
     static create_session(user: any, req: any, ground: any): Promise;
     public send_http_login_success(req: any, res: any, user: any): void;
     public register(req: any, res: any): Promise;

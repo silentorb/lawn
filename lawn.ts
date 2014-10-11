@@ -222,23 +222,50 @@ class Lawn extends Vineyard.Bulb {
     if (typeof body.facebook_token === 'string')
       return this.vineyard.bulbs.facebook.login(req, res, body)
 
+    var name = body.name
+    var password = body.pass
+
     var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?"
     console.log('login', body)
-    return this.ground.db.query(sql, [body.name, body.pass])
-      .then((rows)=> {
-        if (rows.length == 0) {
-          var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?"
-          this.ground.db.query(sql, [body.name, body.pass])
-          throw new Lawn.HttpError('Invalid login info.', 400)
-        }
+    return this.ground.db.query_single(sql, [name, password])
+      .then((user)=> {
+        if (user)
+          return when.resolve(user)
 
-        if (rows[0].status === 0)
+        var sql = "SELECT users.id, users.username, users.status, requests.password as new_password FROM users "
+          + "\nJOIN password_reset_requests requests ON requests.user = users.id"
+          + "\nWHERE users.username = ? AND requests.password = ?"
+          + "\nAND requests.used = 0"
+          + "\nAND requests.created > UNIX_TIMESTAMP() - 12 * 60 * 60"
+        console.log('sql', sql)
+        return this.ground.db.query_single(sql, [name, password])
+          .then((user)=> {
+            console.log('hey', user, [name, password])
+            if (!user)
+              throw new Lawn.HttpError('Invalid login info.', 400)
+
+            if (user.status === 0)
+              throw new Lawn.HttpError('This account has been disabled.', 403)
+
+            password = user.new_password
+            delete user.new_password
+            return this.ground.db.query("UPDATE users SET password = ? WHERE id = ?", [password, user.id])
+              .then(()=> this.ground.db.query(
+                "UPDATE password_reset_requests SET used = 1, modified = UNIX_TIMESTAMP()"
+                + "\nWHERE password = ? AND user = ?", [password, user.id]))
+              .then(()=> user)
+          })
+      })
+      .then((user)=> {
+        if (!user)
+          throw new Lawn.HttpError('Invalid login info.', 400)
+
+        if (user.status === 0)
           throw new Lawn.HttpError('This account has been disabled.', 403)
 
-        if (rows[0].status === 2)
+        if (user.status === 2)
           throw new Lawn.HttpError('This account is awaiting email verification.', 403)
 
-        var user = rows[0];
         this.invoke('user.login', user, body)
           .then(()=> {
             return Lawn.create_session(user, req, this.ground)
@@ -247,39 +274,44 @@ class Lawn extends Vineyard.Bulb {
       })
   }
 
-  check_password_reset_configuration(req, res, body):Promise {
-    if (!this.config.site || !this.config.site.name || !this.password_reset_template) {
-      res.send({
-        message: "This site is not configured to support resetting passwords.",
-        key: "vineyard-password-not-configured"
-      })
+  is_configured_for_password_reset():boolean {
+    return this.config.site
+    && this.config.site.name
+    && this.mail
+    && typeof this.password_reset_template == 'string'
+  }
 
-      return when.reject()
-    }
-    return when.resolve()
+  check_password_reset_configuration(req, res, body):Promise {
+    return this.is_configured_for_password_reset()
+      ? when.resolve()
+      : when.reject({
+      status: 400,
+      message: "This site is not configured to support resetting passwords.",
+      key: "vineyard-password-not-configured"
+    })
   }
 
   password_reset_request(req, res, body):Promise {
     return this.check_password_reset_configuration(req, res, body)
-      .then(() => this.ground.db.query_single("SELECT * FROM users WHERE username = ?"))
+      .then(() => this.ground.db.query_single("SELECT * FROM users WHERE username = ?", [body.username]))
       .then((user) => {
         if (!user) {
-          res.json(400, {
+          return when.reject({
+            status: 400,
             message: "There is no user with that username.",
             key: "vineyard-password-reset-user-not-found"
           })
-          return when.resolve()
         }
         if (!user.email) {
-          res.json(400, {
+          return when.reject({
+            status: 400,
             message: "An email address is required to reset your password, and your account does not have an email address.",
             key: "vineyard-password-reset-no-email-address"
           })
-          return when.resolve()
         }
         var sql = "SELECT * FROM password_reset_requests"
           + "\nJOIN users ON users.id = password_reset_requests.id AND users.username = ?"
-          + "\nWHERE password_reset_requests.modified > UNIX_TIMESTAMP() - 12 * 60 * 60"
+          + "\nWHERE password_reset_requests.created > UNIX_TIMESTAMP() - 12 * 60 * 60"
           + "\nORDER BY used DESC"
         return this.ground.db.query_single(sql, [body.username])
           .then((row)=> {
@@ -298,18 +330,23 @@ class Lawn extends Vineyard.Bulb {
               }
             }
             else {
-              var email = {
-                title: this.config.site.name + "Password Reset",
-                content: this.password_reset_template
-              }
-              return this.invoke('compose-password-reset-email', email)
-                .then(()=> {
-                  return this.mail.send(user.email, email.title, email.content)
+              return this.create_password_reset_entry(user.id)
+                .then((entry)=> {
+                  var email = {
+                    title: this.config.site.name + " Password Reset",
+                    content: this.password_reset_template
+                      .replace(/\{name}/g, user.username)
+                      .replace(/\{password}/g, entry.password)
+                  }
+                  return this.invoke('compose-password-reset-email', email)
                     .then(()=> {
-                      res.send({
-                        message: "A tempory password was sent to your email.",
-                        key: "vineyard-password-reset-sent"
-                      })
+                      return this.mail.send(user.email, email.title, email.content)
+                        .then(()=> {
+                          res.send({
+                            message: "A tempory password was sent to your email.",
+                            key: "vineyard-password-reset-sent"
+                          })
+                        })
                     })
                 })
             }
@@ -318,29 +355,28 @@ class Lawn extends Vineyard.Bulb {
       })
   }
 
-//  password_reset_execute(req, res, body):Promise {
-//    function generate_password() {
-//      var range = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
-//      var result =''
-//      for (i = 0; i < 8; ++i) {
-//        result += range[Math.floor(Math.random() * range.length)]
-//      }
-//
-//      return result
-//    }
-//
-//    var sql ="SELECT * FROM password_reset_requests WHERE key = ? AND used = 0"
-//    return this.check_password_reset_configuration(req, res, body)
-//      .then(() => this.ground.db.query_single(sql,[body.key]))
-//      .then((request) => {
-//        if (!request) {
-//          res.send({
-//            message: "That is not a valid password reset token."
-//            key: "vineyard-password-reset-not-found"
-//          })
-//        }
-//      })
-//  }
+  create_password_reset_entry(user_id):Promise {
+    function generate_password() {
+      var range = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+      var result = ''
+      for (var i = 0; i < 8; ++i) {
+        result += range[Math.floor(Math.random() * range.length)]
+      }
+
+      return result
+    }
+
+    var password = generate_password()
+
+    var sql = "INSERT INTO password_reset_requests (`user`, `password`, `created`, `modified`, `used`)"
+      + " VALUES (?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0)"
+    return this.ground.db.query(sql, [user_id, password])
+      .then(()=> {
+        return {
+          password: password
+        }
+      })
+  }
 
   static create_session(user, req, ground):Promise {
     var ip = req.headers['x-forwarded-for'] ||
@@ -617,9 +653,9 @@ class Lawn extends Vineyard.Bulb {
       .done(()=> {
       }, (error)=> {
         error = error || {}
-        console.log('public http error:', error.message, error.stack)
         var status = error.status || 500
         var message = status == 500 ? 'Server Error' : error.message
+        console.log('public http error:', status || 500, error.message, error.stack)
         res.json(status || 500, {message: message})
       })
   }
@@ -819,7 +855,6 @@ class Lawn extends Vineyard.Bulb {
     this.listen_public_http('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
     this.listen_public_http('/vineyard/login', (req, res)=> this.http_login(req, res, req.query), 'get')
     this.listen_user_http('/vineyard/query', (req, res, user)=> {
-      console.log('server recieved query request.')
       return Lawn.Irrigation.query(req.body, user, this.ground, this.vineyard)
         .then((result)=> {
           if (!result.status)
@@ -833,7 +868,6 @@ class Lawn extends Vineyard.Bulb {
 //    this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_execute(req, res, req.query), 'get')
 
     this.listen_user_http('/vineyard/update', (req, res, user)=> {
-      console.log('server recieved query request.')
       return Lawn.Irrigation.update(req.body, user, this.ground, this.vineyard)
         .then((result)=> {
           if (!result.status)
@@ -1024,6 +1058,7 @@ module Lawn {
 //          else
           error = error || {}
           console.log('service error:', error.message, error.status, error.stack)
+          console.log(JSON.stringify(request))
           var status = error.status || 500
 
           var response = {
@@ -1125,14 +1160,14 @@ module Lawn {
 
     static run_query(query:Ground.Query_Builder, user:Vineyard.IUser, vineyard:Vineyard, request:Ground.External_Query_Source):Promise {
       var lawn = vineyard.bulbs['lawn']
-      var query_result:Ground.Query_Result = { query_count: 0 }
+      var query_result:Ground.Query_Result = {query_count: 0}
       var fortress = vineyard.bulbs.fortress
       if (request.return_sql === true && (!fortress || fortress.user_has_role(user, 'dev')))
         query_result.return_sql = true;
 
       var start = Date.now()
       return query.run(query_result)
-      .then((result)=> {
+        .then((result)=> {
           result.query_stats.duration = Math.abs(Date.now() - start)
           if (result.sql && !vineyard.ground.log_queries)
             console.log('\nservice-query:', "\n" + result.sql)
@@ -1142,7 +1177,7 @@ module Lawn {
 
           if (lawn.config.log_queries === true) {
             var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count, version)"
-            + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?, ?)"
+              + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?, ?)"
 
             // This may cause some problems with the automated tests,
             // but the response does not wait for this log to be stored.
@@ -1340,6 +1375,9 @@ module Lawn {
     }
 
     format_message(name, data):string {
+      if (!this.templates)
+        return name
+
       if (!this.templates[name])
         throw new Error("Could not find a message template for " + name + ".")
 
@@ -1454,7 +1492,7 @@ module Lawn {
     constructor(config:Mail_Config) {
       this.config = config
       var nodemailer = require('nodemailer')
-      var ses_transport = require('ses_transport')
+      var ses_transport = require('nodemailer-ses-transport')
       this.transporter = nodemailer.createTransport(ses_transport(config))
     }
 

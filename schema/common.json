@@ -353,7 +353,7 @@
         }
       }
     },
-    "forgot_password_request": {
+    "password_reset_request": {
       "properties": {
         "id": {
           "type": "int"
@@ -362,7 +362,7 @@
           "type": "reference",
           "trellis": "user"
         },
-        "key": {
+        "password": {
           "type": "string"
         },
         "created": {

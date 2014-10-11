@@ -200,22 +200,43 @@ var Lawn = (function (_super) {
         if (typeof body.facebook_token === 'string')
             return this.vineyard.bulbs.facebook.login(req, res, body);
 
+        var name = body.name;
+        var password = body.pass;
+
         var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?";
         console.log('login', body);
-        return this.ground.db.query(sql, [body.name, body.pass]).then(function (rows) {
-            if (rows.length == 0) {
-                var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?";
-                _this.ground.db.query(sql, [body.name, body.pass]);
-                throw new Lawn.HttpError('Invalid login info.', 400);
-            }
+        return this.ground.db.query_single(sql, [name, password]).then(function (user) {
+            if (user)
+                return when.resolve(user);
 
-            if (rows[0].status === 0)
+            var sql = "SELECT users.id, users.username, users.status, requests.password as new_password FROM users " + "\nJOIN password_reset_requests requests ON requests.user = users.id" + "\nWHERE users.username = ? AND requests.password = ?" + "\nAND requests.used = 0" + "\nAND requests.created > UNIX_TIMESTAMP() - 12 * 60 * 60";
+            console.log('sql', sql);
+            return _this.ground.db.query_single(sql, [name, password]).then(function (user) {
+                console.log('hey', user, [name, password]);
+                if (!user)
+                    throw new Lawn.HttpError('Invalid login info.', 400);
+
+                if (user.status === 0)
+                    throw new Lawn.HttpError('This account has been disabled.', 403);
+
+                password = user.new_password;
+                delete user.new_password;
+                return _this.ground.db.query("UPDATE users SET password = ? WHERE id = ?", [password, user.id]).then(function () {
+                    return _this.ground.db.query("UPDATE password_reset_requests SET used = 1, modified = UNIX_TIMESTAMP()" + "\nWHERE password = ? AND user = ?", [password, user.id]);
+                }).then(function () {
+                    return user;
+                });
+            });
+        }).then(function (user) {
+            if (!user)
+                throw new Lawn.HttpError('Invalid login info.', 400);
+
+            if (user.status === 0)
                 throw new Lawn.HttpError('This account has been disabled.', 403);
 
-            if (rows[0].status === 2)
+            if (user.status === 2)
                 throw new Lawn.HttpError('This account is awaiting email verification.', 403);
 
-            var user = rows[0];
             _this.invoke('user.login', user, body).then(function () {
                 return Lawn.create_session(user, req, _this.ground).then(function () {
                     return _this.send_http_login_success(req, res, user);
@@ -224,38 +245,38 @@ var Lawn = (function (_super) {
         });
     };
 
-    Lawn.prototype.check_password_reset_configuration = function (req, res, body) {
-        if (!this.config.site || !this.config.site.name || !this.password_reset_template) {
-            res.send({
-                message: "This site is not configured to support resetting passwords.",
-                key: "vineyard-password-not-configured"
-            });
+    Lawn.prototype.is_configured_for_password_reset = function () {
+        return this.config.site && this.config.site.name && this.mail && typeof this.password_reset_template == 'string';
+    };
 
-            return when.reject();
-        }
-        return when.resolve();
+    Lawn.prototype.check_password_reset_configuration = function (req, res, body) {
+        return this.is_configured_for_password_reset() ? when.resolve() : when.reject({
+            status: 400,
+            message: "This site is not configured to support resetting passwords.",
+            key: "vineyard-password-not-configured"
+        });
     };
 
     Lawn.prototype.password_reset_request = function (req, res, body) {
         var _this = this;
         return this.check_password_reset_configuration(req, res, body).then(function () {
-            return _this.ground.db.query_single("SELECT * FROM users WHERE username = ?");
+            return _this.ground.db.query_single("SELECT * FROM users WHERE username = ?", [body.username]);
         }).then(function (user) {
             if (!user) {
-                res.json(400, {
+                return when.reject({
+                    status: 400,
                     message: "There is no user with that username.",
                     key: "vineyard-password-reset-user-not-found"
                 });
-                return when.resolve();
             }
             if (!user.email) {
-                res.json(400, {
+                return when.reject({
+                    status: 400,
                     message: "An email address is required to reset your password, and your account does not have an email address.",
                     key: "vineyard-password-reset-no-email-address"
                 });
-                return when.resolve();
             }
-            var sql = "SELECT * FROM password_reset_requests" + "\nJOIN users ON users.id = password_reset_requests.id AND users.username = ?" + "\nWHERE password_reset_requests.modified > UNIX_TIMESTAMP() - 12 * 60 * 60" + "\nORDER BY used DESC";
+            var sql = "SELECT * FROM password_reset_requests" + "\nJOIN users ON users.id = password_reset_requests.id AND users.username = ?" + "\nWHERE password_reset_requests.created > UNIX_TIMESTAMP() - 12 * 60 * 60" + "\nORDER BY used DESC";
             return _this.ground.db.query_single(sql, [body.username]).then(function (row) {
                 if (row) {
                     if (row.used) {
@@ -270,21 +291,44 @@ var Lawn = (function (_super) {
                         });
                     }
                 } else {
-                    var email = {
-                        title: _this.config.site.name + "Password Reset",
-                        content: _this.password_reset_template
-                    };
-                    return _this.invoke('compose-password-reset-email', email).then(function () {
-                        return _this.mail.send(user.email, email.title, email.content).then(function () {
-                            res.send({
-                                message: "A tempory password was sent to your email.",
-                                key: "vineyard-password-reset-sent"
+                    return _this.create_password_reset_entry(user.id).then(function (entry) {
+                        var email = {
+                            title: _this.config.site.name + " Password Reset",
+                            content: _this.password_reset_template.replace(/\{name}/g, user.username).replace(/\{password}/g, entry.password)
+                        };
+                        return _this.invoke('compose-password-reset-email', email).then(function () {
+                            return _this.mail.send(user.email, email.title, email.content).then(function () {
+                                res.send({
+                                    message: "A tempory password was sent to your email.",
+                                    key: "vineyard-password-reset-sent"
+                                });
                             });
                         });
                     });
                 }
                 return when.resolve();
             });
+        });
+    };
+
+    Lawn.prototype.create_password_reset_entry = function (user_id) {
+        function generate_password() {
+            var range = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+            var result = '';
+            for (var i = 0; i < 8; ++i) {
+                result += range[Math.floor(Math.random() * range.length)];
+            }
+
+            return result;
+        }
+
+        var password = generate_password();
+
+        var sql = "INSERT INTO password_reset_requests (`user`, `password`, `created`, `modified`, `used`)" + " VALUES (?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP(), 0)";
+        return this.ground.db.query(sql, [user_id, password]).then(function () {
+            return {
+                password: password
+            };
         });
     };
 
@@ -532,9 +576,9 @@ var Lawn = (function (_super) {
         action(req, res).done(function () {
         }, function (error) {
             error = error || {};
-            console.log('public http error:', error.message, error.stack);
             var status = error.status || 500;
             var message = status == 500 ? 'Server Error' : error.message;
+            console.log('public http error:', status || 500, error.message, error.stack);
             res.json(status || 500, { message: message });
         });
     };
@@ -737,7 +781,6 @@ var Lawn = (function (_super) {
             return _this.http_login(req, res, req.query);
         }, 'get');
         this.listen_user_http('/vineyard/query', function (req, res, user) {
-            console.log('server recieved query request.');
             return Lawn.Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (result) {
                 if (!result.status)
                     result.status = 200;
@@ -751,7 +794,6 @@ var Lawn = (function (_super) {
         });
 
         this.listen_user_http('/vineyard/update', function (req, res, user) {
-            console.log('server recieved query request.');
             return Lawn.Irrigation.update(req.body, user, _this.ground, _this.vineyard).then(function (result) {
                 if (!result.status)
                     result.status = 200;
@@ -910,6 +952,7 @@ var Lawn;
             }, function (error) {
                 error = error || {};
                 console.log('service error:', error.message, error.status, error.stack);
+                console.log(JSON.stringify(request));
                 var status = error.status || 500;
 
                 var response = {
@@ -1198,6 +1241,9 @@ var Lawn;
         };
 
         Songbird.prototype.format_message = function (name, data) {
+            if (!this.templates)
+                return name;
+
             if (!this.templates[name])
                 throw new Error("Could not find a message template for " + name + ".");
 
@@ -1304,7 +1350,7 @@ var Lawn;
         function Mail(config) {
             this.config = config;
             var nodemailer = require('nodemailer');
-            var ses_transport = require('ses_transport');
+            var ses_transport = require('nodemailer-ses-transport');
             this.transporter = nodemailer.createTransport(ses_transport(config));
         }
         Mail.prototype.send = function (to, subject, text) {

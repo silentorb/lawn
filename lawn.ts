@@ -1198,6 +1198,9 @@ module Lawn {
     }
 
     static update(request:Update_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      if (user.id == 2)
+        throw new HttpError('Anonymous cannot create content.', 401);
+
       if (!MetaHub.is_array(request.objects))
         throw new HttpError('Update is missing objects list.', 400)
 

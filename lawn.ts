@@ -1057,7 +1057,7 @@ module Lawn {
 //              unauthorized_object: error.resource})
 //          else
           error = error || {}
-          console.log('service error:', error.message, error.status, error.stack)
+          console.log(method + 'service error:', error.message, error.status, error.stack)
           console.log(JSON.stringify(request))
           var status = error.status || 500
 

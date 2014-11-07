@@ -48,6 +48,7 @@ declare class Lawn extends Vineyard.Bulb {
     public process_error(error: any, user: any): {
         status: any;
         message: any;
+        key: any;
     };
     public process_user_http(req: any, res: any, action: any): void;
     public listen_user_http(path: any, action: any, method?: string): void;
@@ -86,6 +87,7 @@ declare module Lawn {
     }
     interface Update_Request {
         objects: any[];
+        version?: number;
     }
     class HttpError {
         public name: string;
@@ -93,7 +95,8 @@ declare module Lawn {
         public stack: any;
         public status: any;
         public details: any;
-        constructor(message: string, status?: number);
+        public key: any;
+        constructor(message: string, status?: number, key?: any);
     }
     class Authorization_Error extends HttpError {
         public details: any;

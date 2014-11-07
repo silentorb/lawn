@@ -704,7 +704,8 @@ class Lawn extends Vineyard.Bulb {
 
     var response = {
       status: status,
-      message: message
+      message: message,
+      key: error.key || 'unknown'
     }
 
     var fortress = this.vineyard.bulbs.fortress
@@ -714,14 +715,13 @@ class Lawn extends Vineyard.Bulb {
       response['details'] = error.details
     }
 
-    console.log('service error:', status, error.message, error.stack)
+    console.log('service error:', status, error.message, error.stack, error.key)
 
     return response
   }
 
   process_user_http(req, res, action) {
     var user = null, send_error = (error)=> {
-      console.log('yeah')
       var response = this.process_error(error, user)
       var status = response.status
       delete response.status
@@ -1000,7 +1000,8 @@ module Lawn {
   }
 
   export interface Update_Request {
-    objects:any[];
+    objects:any[]
+    version?:number
   }
 
   export class HttpError {
@@ -1009,10 +1010,12 @@ module Lawn {
     stack
     status
     details
+    key
 
-    constructor(message:string, status = 500) {
+    constructor(message:string, status = 500, key = undefined) {
       this.message = message
       this.status = status
+      this.key = key
     }
   }
 
@@ -1035,6 +1038,13 @@ module Lawn {
     }
 
     static process(method:string, request:Ground.External_Query_Source, user:Vineyard.IUser, vineyard:Vineyard, socket, callback):Promise {
+      //if (!request.version) {
+      //  return when.reject({
+      //    status: 400,
+      //    key: 'version-required',
+      //    message: "Request requires a version property."
+      //  })
+      //}
       var fortress = vineyard.bulbs.fortress
       var action = Irrigation[method]
       return Irrigation.prepare_fortress(fortress, user)
@@ -1065,7 +1075,8 @@ module Lawn {
             code: status,
             status: status,
             request: request,
-            message: status == 500 ? "Server Error" : error.message
+            message: status == 500 ? "Server Error" : error.message,
+            key: error.key || 'unknown'
           }
 
           if (fortress.user_has_role(user, 'dev')) {
@@ -1136,6 +1147,9 @@ module Lawn {
     }
 
     static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
+        throw new HttpError('The request must have a version property.', 400, 'version-required')
+
       if (!request)
         throw new HttpError('Empty request', 400)
 
@@ -1198,6 +1212,9 @@ module Lawn {
     }
 
     static update(request:Update_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
+        throw new HttpError('The request must have a version property.', 400, 'version-required')
+
       if (user.id == 2)
         throw new HttpError('Anonymous cannot create content.', 403);
 

@@ -627,7 +627,8 @@ var Lawn = (function (_super) {
 
         var response = {
             status: status,
-            message: message
+            message: message,
+            key: error.key || 'unknown'
         };
 
         var fortress = this.vineyard.bulbs.fortress;
@@ -637,7 +638,7 @@ var Lawn = (function (_super) {
             response['details'] = error.details;
         }
 
-        console.log('service error:', status, error.message, error.stack);
+        console.log('service error:', status, error.message, error.stack, error.key);
 
         return response;
     };
@@ -645,7 +646,6 @@ var Lawn = (function (_super) {
     Lawn.prototype.process_user_http = function (req, res, action) {
         var _this = this;
         var user = null, send_error = function (error) {
-            console.log('yeah');
             var response = _this.process_error(error, user);
             var status = response.status;
             delete response.status;
@@ -903,11 +903,13 @@ var Lawn = (function (_super) {
 var Lawn;
 (function (Lawn) {
     var HttpError = (function () {
-        function HttpError(message, status) {
+        function HttpError(message, status, key) {
             if (typeof status === "undefined") { status = 500; }
+            if (typeof key === "undefined") { key = undefined; }
             this.name = "HttpError";
             this.message = message;
             this.status = status;
+            this.key = key;
         }
         return HttpError;
     })();
@@ -959,7 +961,8 @@ var Lawn;
                     code: status,
                     status: status,
                     request: request,
-                    message: status == 500 ? "Server Error" : error.message
+                    message: status == 500 ? "Server Error" : error.message,
+                    key: error.key || 'unknown'
                 };
 
                 if (fortress.user_has_role(user, 'dev')) {
@@ -1026,6 +1029,9 @@ var Lawn;
         };
 
         Irrigation.query = function (request, user, ground, vineyard) {
+            if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
+                throw new HttpError('The request must have a version property.', 400, 'version-required');
+
             if (!request)
                 throw new HttpError('Empty request', 400);
 
@@ -1080,6 +1086,9 @@ var Lawn;
         };
 
         Irrigation.update = function (request, user, ground, vineyard) {
+            if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
+                throw new HttpError('The request must have a version property.', 400, 'version-required');
+
             if (user.id == 2)
                 throw new HttpError('Anonymous cannot create content.', 403);
 

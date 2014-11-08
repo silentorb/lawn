@@ -1,0 +1,98 @@
+{
+  "tables": {
+    "roles_users": {
+      "primary_keys": [ "user", "role" ],
+      "properties": {
+        "user": {
+          "type": "int"
+        },
+        "role": {
+          "type": "int"
+        }
+      }
+    }
+  },
+  "trellises": {
+    "user": {
+      "primary_key": "id",
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "private": true
+        },
+        "email": {
+          "type": "string",
+          "private": true,
+          "allow_null": true
+        },
+        "created": {
+          "type": "created",
+          "readonly": true,
+          "private": true
+        },
+        "modified": {
+          "type": "modified",
+          "readonly": true,
+          "private": true
+        },
+        "roles": {
+          "type": "list",
+          "trellis": "role",
+          "private": true
+        },
+        "online": {
+          "type": "bool",
+          "default": false
+        },
+        "facebook_id": {
+          "type": "unsigned bigint",
+          "private": true,
+          "allow_null": true
+        },
+        "phone": {
+          "type": "string",
+          "private": true,
+          "allow_null": true
+        },
+        "address": {
+          "type": "reference",
+          "trellis": "address",
+          "allow_null": true
+        },
+        "image": {
+          "type": "reference",
+          "trellis": "file",
+          "allow_null": true
+        },
+        "status": {
+          "type": "int",
+          "default": 1
+        }
+      }
+    },
+    "role": {
+      "primary_key": "id",
+      "properties": {
+        "id": {
+          "type": "int"
+        },
+        "name": {
+          "type": "string"
+        },
+        "users": {
+          "type": "list",
+          "trellis": "user"
+        }
+      }
+    }
+  }
+}

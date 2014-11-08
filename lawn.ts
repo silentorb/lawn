@@ -10,7 +10,8 @@ import Vineyard = require('vineyard')
 declare var Irrigation
 
 interface User_Source {
-  name:string
+  name?:string
+  display_name?:string
   username:string
   password:string
   email?:string
@@ -35,6 +36,7 @@ class Lawn extends Vineyard.Bulb {
 
   grow() {
     var ground = this.ground
+    this.config.display_name_key = this.config.display_name_key || 'display_name'
 
     if (this.config.log_updates) {
       this.listen(ground, '*.update', (seed, update:Ground.Update):Promise => {
@@ -222,12 +224,14 @@ class Lawn extends Vineyard.Bulb {
     if (typeof body.facebook_token === 'string')
       return this.vineyard.bulbs.facebook.login(req, res, body)
 
-    var name = body.name
+    var username = body.name
     var password = body.pass
 
-    var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?"
+    var sql = "SELECT id, " + this.config.display_name_key
+      + ", status FROM users WHERE username = ? AND password = ?"
+
     console.log('login', body)
-    return this.ground.db.query_single(sql, [name, password])
+    return this.ground.db.query_single(sql, [username, password])
       .then((user)=> {
         if (user)
           return when.resolve(user)
@@ -238,9 +242,9 @@ class Lawn extends Vineyard.Bulb {
           + "\nAND requests.used = 0"
           + "\nAND requests.created > UNIX_TIMESTAMP() - 12 * 60 * 60"
         console.log('sql', sql)
-        return this.ground.db.query_single(sql, [name, password])
+        return this.ground.db.query_single(sql, [username, password])
           .then((user)=> {
-            console.log('hey', user, [name, password])
+            console.log('hey', user, [username, password])
             if (!user)
               throw new Lawn.HttpError('Invalid login info.', 400)
 
@@ -413,7 +417,6 @@ class Lawn extends Vineyard.Bulb {
 
   register(req, res):Promise {
     var body = <User_Source>req.body,
-      name = body.name,
       username = body.username,
       email = body.email,
       phone = body.phone,
@@ -421,20 +424,20 @@ class Lawn extends Vineyard.Bulb {
 
     var invalid_characters = /[^A-Za-z\- _0-9]/
 
-    if (!name)
-      return when.reject(new Lawn.HttpError('Request missing name.', 400))
+//    if (!name)
+//      return when.reject(new Lawn.HttpError('Request missing name.', 400))
 
-    if (typeof name != 'string' || name.length > 32 || name.match(invalid_characters))
-      return when.reject(new Lawn.HttpError('Invalid name.', 400))
+//    if (typeof name != 'string' || name.length > 32 || name.match(invalid_characters))
+//      return when.reject(new Lawn.HttpError('Invalid name.', 400))
 
-    if (typeof username != 'string' || username.length > 32 || name.match(invalid_characters))
+    if (typeof username != 'string' || username.length > 32 || username.match(invalid_characters))
       return when.reject(new Lawn.HttpError('Invalid username.', 400))
 
     if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
       return when.reject(new Lawn.HttpError('Invalid email address.', 400))
 
     var register = (facebook_id = undefined)=> {
-      var args = [body.name]
+      var args = [body.username]
       var sql = "SELECT 'username' as value FROM users WHERE username = ?"
       if (body.email) {
         sql += "\nUNION SELECT 'email' as value FROM users WHERE email = ?"
@@ -457,7 +460,6 @@ class Lawn extends Vineyard.Bulb {
             gender = null
 
           var user = {
-            name: name,
             username: username,
             email: email,
             password: body.password,
@@ -467,13 +469,15 @@ class Lawn extends Vineyard.Bulb {
             address: body.address,
             image: body.image
           }
+          user[this.config.display_name_key] = body[this.config.display_name_key]
+
           console.log('user', user, facebook_id)
           this.ground.create_update('user', user).run()
             .then((user)=> {
               var finished = ()=> {
                 user.facebook_id = facebook_id
                 res.send({
-                  message: 'User ' + name + ' created successfully.',
+                  message: 'User ' + username + ' created successfully.',
                   user: user
                 })
               }
@@ -518,7 +522,7 @@ class Lawn extends Vineyard.Bulb {
     }
     return this.vineyard.bulbs.facebook.get_user_facebook_id(body)
       .then((facebook_id)=> {
-        var args = [body.name]
+        var args = [body.username]
         var sql = "SELECT 'username' as value, FROM users WHERE username = ?"
         if (body.email) {
           sql += "UNION SELECT 'email' as value FROM users WHERE email = ?"
@@ -997,6 +1001,7 @@ module Lawn {
     mail?:Lawn.Mail_Config
     password_reset_template?:string
     site
+    display_name_key:string
   }
 
   export interface Update_Request {
@@ -1265,21 +1270,22 @@ module Lawn {
 
     create_user(facebook_id, source):Promise {
       var user = {
-        name: source.name,
         username: source.username,
         email: source.email,
         gender: source.gender,
         facebook_id: facebook_id
       }
+      user[this.lawn.config.display_name_key] = source.name
 
       console.log('user', user)
       return this.ground.create_update('user', user).run()
         .then((user)=> {
-          return {
+          var result = {
             id: user.id,
-            name: user.name,
             username: user.username
           }
+          result[this.lawn.config.display_name_key] = user.name
+          return result
         })
     }
 
@@ -1301,7 +1307,7 @@ module Lawn {
             return when.resolve(new Lawn.HttpError('Invalid facebook login info.', 400))
           }
 
-          return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
+          return this.ground.db.query_single("SELECT id, username FROM users WHERE facebook_id = ?", [facebook_id])
             .then((user)=> {
               if (user)
                 return user

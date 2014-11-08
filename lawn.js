@@ -22,6 +22,7 @@ var Lawn = (function (_super) {
     Lawn.prototype.grow = function () {
         var _this = this;
         var ground = this.ground;
+        this.config.display_name_key = this.config.display_name_key || 'display_name';
 
         if (this.config.log_updates) {
             this.listen(ground, '*.update', function (seed, update) {
@@ -200,19 +201,20 @@ var Lawn = (function (_super) {
         if (typeof body.facebook_token === 'string')
             return this.vineyard.bulbs.facebook.login(req, res, body);
 
-        var name = body.name;
+        var username = body.name;
         var password = body.pass;
 
-        var sql = "SELECT id, name, status FROM users WHERE username = ? AND password = ?";
+        var sql = "SELECT id, " + this.config.display_name_key + ", status FROM users WHERE username = ? AND password = ?";
+
         console.log('login', body);
-        return this.ground.db.query_single(sql, [name, password]).then(function (user) {
+        return this.ground.db.query_single(sql, [username, password]).then(function (user) {
             if (user)
                 return when.resolve(user);
 
             var sql = "SELECT users.id, users.username, users.status, requests.password as new_password FROM users " + "\nJOIN password_reset_requests requests ON requests.user = users.id" + "\nWHERE users.username = ? AND requests.password = ?" + "\nAND requests.used = 0" + "\nAND requests.created > UNIX_TIMESTAMP() - 12 * 60 * 60";
             console.log('sql', sql);
-            return _this.ground.db.query_single(sql, [name, password]).then(function (user) {
-                console.log('hey', user, [name, password]);
+            return _this.ground.db.query_single(sql, [username, password]).then(function (user) {
+                console.log('hey', user, [username, password]);
                 if (!user)
                     throw new Lawn.HttpError('Invalid login info.', 400);
 
@@ -364,17 +366,11 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.register = function (req, res) {
         var _this = this;
-        var body = req.body, name = body.name, username = body.username, email = body.email, phone = body.phone, facebook_token = body.facebook_token;
+        var body = req.body, username = body.username, email = body.email, phone = body.phone, facebook_token = body.facebook_token;
 
         var invalid_characters = /[^A-Za-z\- _0-9]/;
 
-        if (!name)
-            return when.reject(new Lawn.HttpError('Request missing name.', 400));
-
-        if (typeof name != 'string' || name.length > 32 || name.match(invalid_characters))
-            return when.reject(new Lawn.HttpError('Invalid name.', 400));
-
-        if (typeof username != 'string' || username.length > 32 || name.match(invalid_characters))
+        if (typeof username != 'string' || username.length > 32 || username.match(invalid_characters))
             return when.reject(new Lawn.HttpError('Invalid username.', 400));
 
         if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
@@ -382,7 +378,7 @@ var Lawn = (function (_super) {
 
         var register = function (facebook_id) {
             if (typeof facebook_id === "undefined") { facebook_id = undefined; }
-            var args = [body.name];
+            var args = [body.username];
             var sql = "SELECT 'username' as value FROM users WHERE username = ?";
             if (body.email) {
                 sql += "\nUNION SELECT 'email' as value FROM users WHERE email = ?";
@@ -403,7 +399,6 @@ var Lawn = (function (_super) {
                     gender = null;
 
                 var user = {
-                    name: name,
                     username: username,
                     email: email,
                     password: body.password,
@@ -413,12 +408,14 @@ var Lawn = (function (_super) {
                     address: body.address,
                     image: body.image
                 };
+                user[_this.config.display_name_key] = body[_this.config.display_name_key];
+
                 console.log('user', user, facebook_id);
                 _this.ground.create_update('user', user).run().then(function (user) {
                     var finished = function () {
                         user.facebook_id = facebook_id;
                         res.send({
-                            message: 'User ' + name + ' created successfully.',
+                            message: 'User ' + username + ' created successfully.',
                             user: user
                         });
                     };
@@ -453,7 +450,7 @@ var Lawn = (function (_super) {
             });
         }
         return this.vineyard.bulbs.facebook.get_user_facebook_id(body).then(function (facebook_id) {
-            var args = [body.name];
+            var args = [body.username];
             var sql = "SELECT 'username' as value, FROM users WHERE username = ?";
             if (body.email) {
                 sql += "UNION SELECT 'email' as value FROM users WHERE email = ?";
@@ -1141,21 +1138,23 @@ var Lawn;
         };
 
         Facebook.prototype.create_user = function (facebook_id, source) {
+            var _this = this;
             var user = {
-                name: source.name,
                 username: source.username,
                 email: source.email,
                 gender: source.gender,
                 facebook_id: facebook_id
             };
+            user[this.lawn.config.display_name_key] = source.name;
 
             console.log('user', user);
             return this.ground.create_update('user', user).run().then(function (user) {
-                return {
+                var result = {
                     id: user.id,
-                    name: user.name,
                     username: user.username
                 };
+                result[_this.lawn.config.display_name_key] = user.name;
+                return result;
             });
         };
 
@@ -1178,7 +1177,7 @@ var Lawn;
                     return when.resolve(new Lawn.HttpError('Invalid facebook login info.', 400));
                 }
 
-                return _this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id]).then(function (user) {
+                return _this.ground.db.query_single("SELECT id, username FROM users WHERE facebook_id = ?", [facebook_id]).then(function (user) {
                     if (user)
                         return user;
 

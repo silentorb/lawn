@@ -84,6 +84,7 @@ declare module Lawn {
         mail?: Mail_Config;
         password_reset_template?: string;
         site: any;
+        display_name_key: string;
     }
     interface Update_Request {
         objects: any[];

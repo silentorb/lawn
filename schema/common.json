@@ -1,12 +1,4 @@
 {
-  "tables": {
-    "address": {
-      "name": "addresses"
-    },
-    "country": {
-      "name": "countries"
-    }
-  },
   "trellises": {
     "resource": {
       "primary_key": "guid",
@@ -207,57 +199,12 @@
         }
       }
     },
-    "address": {
-      "parent": "resource",
-      "properties": {
-        "street1": {
-          "type": "string",
-          "allow_null": true
-        },
-        "street2": {
-          "type": "string",
-          "allow_null": true
-        },
-        "country": {
+    "user":{
+      "properties":{
+        "image": {
           "type": "reference",
-          "trellis": "country",
-          "default": 0,
+          "trellis": "file",
           "allow_null": true
-        },
-        "province": {
-          "type": "reference",
-          "trellis": "province",
-          "default": 0,
-          "allow_null": true
-        },
-        "city": {
-          "type": "string",
-          "allow_null": true
-        },
-        "zip": {
-          "type": "string",
-          "allow_null": true
-        }
-      }
-    },
-    "country": {
-      "plural": "counties",
-      "properties": {
-        "id": {
-          "type": "int"
-        },
-        "name": {
-          "type": "string"
-        }
-      }
-    },
-    "province": {
-      "properties": {
-        "id": {
-          "type": "int"
-        },
-        "name": {
-          "type": "string"
         }
       }
     },

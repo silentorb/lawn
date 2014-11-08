@@ -719,7 +719,8 @@ class Lawn extends Vineyard.Bulb {
       response['details'] = error.details
     }
 
-    console.log('service error:', status, error.message, error.stack, error.key)
+    if (this.config.log_authorization_errors !== false || status != 403)
+      console.log('service error:', status, error.message, error.stack, error.key)
 
     return response
   }
@@ -1002,6 +1003,7 @@ module Lawn {
     password_reset_template?:string
     site
     display_name_key:string
+    log_authorization_errors?:boolean
   }
 
   export interface Update_Request {
@@ -1152,6 +1154,7 @@ module Lawn {
     }
 
     static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+      var Fortress = require('vineyard-fortress')
       if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
         throw new HttpError('The request must have a version property.', 400, 'version-required')
 
@@ -1166,10 +1169,11 @@ module Lawn {
       if (fortress) {
         return fortress.query_access(user, query)
           .then((result)=> {
-            if (result.access)
+            if (result.is_allowed)
               return Irrigation.run_query(query, user, vineyard, request)
-            else
-              throw new Authorization_Error('You are not authorized to perform this query', result)
+            else {
+              throw new Authorization_Error(result.get_message(), result)
+            }
           })
       }
       else {

@@ -635,7 +635,8 @@ var Lawn = (function (_super) {
             response['details'] = error.details;
         }
 
-        console.log('service error:', status, error.message, error.stack, error.key);
+        if (this.config.log_authorization_errors !== false || status != 403)
+            console.log('service error:', status, error.message, error.stack, error.key);
 
         return response;
     };
@@ -1026,6 +1027,7 @@ var Lawn;
         };
 
         Irrigation.query = function (request, user, ground, vineyard) {
+            var Fortress = require('vineyard-fortress');
             if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
                 throw new HttpError('The request must have a version property.', 400, 'version-required');
 
@@ -1039,10 +1041,11 @@ var Lawn;
             var fortress = vineyard.bulbs.fortress;
             if (fortress) {
                 return fortress.query_access(user, query).then(function (result) {
-                    if (result.access)
+                    if (result.is_allowed)
                         return Irrigation.run_query(query, user, vineyard, request);
-                    else
-                        throw new Authorization_Error('You are not authorized to perform this query', result);
+                    else {
+                        throw new Authorization_Error(result.get_message(), result);
+                    }
                 });
             } else {
                 return Irrigation.run_query(query, user, vineyard, request);

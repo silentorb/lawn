@@ -85,6 +85,7 @@ declare module Lawn {
         password_reset_template?: string;
         site: any;
         display_name_key: string;
+        log_authorization_errors?: boolean;
     }
     interface Update_Request {
         objects: any[];

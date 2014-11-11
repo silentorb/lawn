@@ -1105,7 +1105,7 @@ var Lawn;
             var fortress = vineyard.bulbs.fortress;
             if (fortress) {
                 return fortress.update_access(user, updates).then(function (result) {
-                    if (result.access) {
+                    if (result.is_allowed) {
                         var update_promises = updates.map(function (update) {
                             return update.run();
                         });

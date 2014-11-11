@@ -1241,7 +1241,7 @@ module Lawn {
       if (fortress) {
         return fortress.update_access(user, updates)
           .then((result)=> {
-            if (result.access) {
+            if (result.is_allowed) {
               var update_promises = updates.map((update) => update.run())
               return when.all(update_promises)
                 .then((objects)=> {

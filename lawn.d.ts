@@ -86,6 +86,10 @@ declare module Lawn {
         site: any;
         display_name_key: string;
         log_authorization_errors?: boolean;
+        valid_username?: any;
+        valid_display_name?: any;
+        valid_password?: any;
+        allow_cors?: boolean;
     }
     interface Update_Request {
         objects: any[];

@@ -48,6 +48,12 @@ var Lawn = (function (_super) {
             var fs = require('fs');
             this.password_reset_template = fs.readFileSync(this.config.password_reset_template, 'ascii');
         }
+
+        this.config['valid_username'] = typeof this.config.valid_username == 'string' ? new RegExp(this.config.valid_username) : /^[A-Za-z\-_0-9]+$/;
+
+        this.config['valid_password'] = typeof this.config.valid_password == 'string' ? new RegExp(this.config.valid_password) : /^[A-Za-z\- _0-9!@#\$%\^&\*\(\)?]+$/;
+
+        this.config['valid_display_name'] = typeof this.config.valid_display_name == 'string' ? new RegExp(this.config.valid_display_name) : /^[A-Za-z\- _0-9!@#\$%\^&\*\(\)?]+$/;
     };
 
     Lawn.authorization = function (handshakeData, callback) {
@@ -366,15 +372,21 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.register = function (req, res) {
         var _this = this;
-        var body = req.body, username = body.username, email = body.email, phone = body.phone, facebook_token = body.facebook_token;
+        var body = req.body, username = body.username, email = body.email, password = body.password, phone = body.phone, facebook_token = body.facebook_token, display_name = body[this.config.display_name_key];
 
-        var invalid_characters = /[^A-Za-z\- _0-9]/;
-
-        if (typeof username != 'string' || username.length > 32 || username.match(invalid_characters))
+        if (typeof username != 'string' || username.length > 32 || !username.match(this.config.valid_username))
             return when.reject(new Lawn.HttpError('Invalid username.', 400));
 
         if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
             return when.reject(new Lawn.HttpError('Invalid email address.', 400));
+
+        if (typeof password != 'string' || password.length > 32 || !password.match(this.config.valid_password))
+            return when.reject(new Lawn.HttpError('Invalid username.', 400));
+
+        if (typeof display_name != 'string')
+            display_name = null;
+        else if (!display_name.match(this.config.valid_display_name))
+            return when.reject(new Lawn.HttpError("Invalid " + this.config.display_name_key, 400));
 
         var register = function (facebook_id) {
             if (typeof facebook_id === "undefined") { facebook_id = undefined; }
@@ -408,7 +420,7 @@ var Lawn = (function (_super) {
                     address: body.address,
                     image: body.image
                 };
-                user[_this.config.display_name_key] = body[_this.config.display_name_key];
+                user[_this.config.display_name_key] = display_name;
 
                 console.log('user', user, facebook_id);
                 _this.ground.create_update('user', user).run().then(function (user) {
@@ -745,25 +757,37 @@ var Lawn = (function (_super) {
         var express = require('express');
         var app = this.app = express();
 
-        app.use(express.bodyParser({ keepExtensions: true, uploadDir: "tmp" }));
-        app.use(express.cookieParser());
+        var parser = require('body-parser');
+        app.use(parser.json());
+        app.use(require('cookie-parser')());
 
+        var session = require('express-session');
         if (typeof this.config.mysql_session_store == 'object') {
             var MySQL_Session_Store = require('express-mysql-session');
             var storage_config = this.config.mysql_session_store;
 
             console.log('using mysql sessions store: ', storage_config.db);
 
-            app.use(express.session({
+            app.use(session({
                 key: storage_config.key,
                 secret: storage_config.secret,
+                resave: true,
+                saveUninitialized: true,
                 store: new MySQL_Session_Store(storage_config.db)
             }));
         } else {
             if (!this.config.cookie_secret)
                 throw new Error('lawn.cookie_secret must be set!');
 
-            app.use(express.session({ secret: this.config.cookie_secret }));
+            app.use(session({
+                secret: this.config.cookie_secret, resave: true,
+                saveUninitialized: true
+            }));
+        }
+
+        if (this.config.allow_cors === true) {
+            app.use(require('cors')());
+            console.log('Using CORS');
         }
 
         if (typeof this.config.log_file === 'string') {

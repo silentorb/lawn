@@ -253,6 +253,13 @@ var Lawn = (function (_super) {
         });
     };
 
+    Lawn.prototype.logout = function (req, res, user) {
+        var sql = "DELETE FROM sessions WHERE user = ? AND token = ?";
+        return this.ground.db.query(sql, [user.id, req.sessionID]).then(function () {
+            return res.json({ key: 'logged-out' });
+        });
+    };
+
     Lawn.prototype.is_configured_for_password_reset = function () {
         return this.config.site && this.config.site.name && this.mail && typeof this.password_reset_template == 'string';
     };
@@ -802,6 +809,13 @@ var Lawn = (function (_super) {
         this.listen_public_http('/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.query);
         }, 'get');
+        this.listen_user_http('/vineyard/logout', function (req, res, user) {
+            return _this.logout(req, res, user);
+        });
+        this.listen_user_http('/vineyard/logout', function (req, res, user) {
+            return _this.logout(req, res, user);
+        }, 'get');
+
         this.listen_user_http('/vineyard/query', function (req, res, user) {
             return Lawn.Irrigation.query(req.body, user, _this.ground, _this.vineyard).then(function (result) {
                 if (!result.status)

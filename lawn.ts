@@ -290,6 +290,12 @@ class Lawn extends Vineyard.Bulb {
       })
   }
 
+  logout(req, res, user) {
+    var sql = "DELETE FROM sessions WHERE user = ? AND token = ?"
+    return this.ground.db.query(sql, [user.id, req.sessionID])
+      .then(()=> res.json({key: 'logged-out'}))
+  }
+
   is_configured_for_password_reset():boolean {
     return this.config.site
     && this.config.site.name
@@ -884,8 +890,12 @@ class Lawn extends Vineyard.Bulb {
       app.use(express.logger({stream: log_file}))
     }
 
+    // Hook login and logout for both GET and POST
     this.listen_public_http('/vineyard/login', (req, res)=> this.http_login(req, res, req.body))
     this.listen_public_http('/vineyard/login', (req, res)=> this.http_login(req, res, req.query), 'get')
+    this.listen_user_http('/vineyard/logout', (req, res, user)=> this.logout(req, res, user))
+    this.listen_user_http('/vineyard/logout', (req, res, user)=> this.logout(req, res, user), 'get')
+
     this.listen_user_http('/vineyard/query', (req, res, user)=> {
       return Lawn.Irrigation.query(req.body, user, this.ground, this.vineyard)
         .then((result)=> {

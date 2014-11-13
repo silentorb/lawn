@@ -1,6 +1,6 @@
 /// <reference path="defs/socket.io.extension.d.ts" />
 /// <reference path="defs/express.d.ts" />
-/// <reference path="lib/references.d.ts" />
+/// <reference path="../vineyard/vineyard.d.ts" />
 declare class Lawn extends Vineyard.Bulb {
     public io: any;
     public instance_sockets: {};
@@ -111,8 +111,6 @@ declare module Lawn {
     class Irrigation {
         static prepare_fortress(fortress: any, user: any): Promise;
         static process(method: string, request: Ground.External_Query_Source, user: Vineyard.IUser, vineyard: Vineyard, socket: any, callback: any): Promise;
-        static generate_hash(input: string): string;
-        static query_with_cache(request: Ground.External_Query_Source, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
         static query(request: Ground.External_Query_Source, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
         static run_query(query: Ground.Query_Builder, user: Vineyard.IUser, vineyard: Vineyard, request: Ground.External_Query_Source): Promise;
         static update(request: Update_Request, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;

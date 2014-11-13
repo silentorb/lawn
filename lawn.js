@@ -588,7 +588,7 @@ var Lawn = (function (_super) {
             var status = error.status || 500;
             var message = status == 500 ? 'Server Error' : error.message;
             console.log('public http error:', status || 500, error.message, error.stack);
-            res.json(status || 500, { message: message });
+            res.status(status || 500).json({ message: message });
         });
     };
 
@@ -659,7 +659,7 @@ var Lawn = (function (_super) {
             var response = _this.process_error(error, user);
             var status = response.status;
             delete response.status;
-            res.json(status, response);
+            res.status(status).json(response);
         };
         try  {
             this.get_user_from_session(req.sessionID).then(function (u) {
@@ -1004,52 +1004,6 @@ var Lawn;
             });
         };
 
-        Irrigation.generate_hash = function (input) {
-            var crypto = require('crypto');
-            var name = 'braitsch';
-            return crypto.createHash('md5').update(name).digest('hex');
-        };
-
-        Irrigation.query_with_cache = function (request, user, ground, vineyard) {
-            if (vineyard.bulbs['lawn'].config.cache_queries !== true) {
-                return Irrigation.query(request, user, ground, vineyard);
-            }
-
-            if (!request)
-                throw new HttpError('Empty request', 400);
-
-            var trellis = ground.sanitize_trellis_argument(request.trellis);
-            if (typeof request.key == 'string' && typeof request.expires == 'number' && request.expires > 0) {
-                var hash = Irrigation.generate_hash(JSON.stringify(request));
-                console.log('hash', hash);
-                var sql = "SELECT * FROM query_cache WHERE (expires = 0 || expires > UNIX_TIMESTAMP()) AND hash = ?";
-                return ground.db.query_single(sql, [hash]).then(function (row) {
-                    console.log('row', row);
-                    if (row) {
-                        console.log('using query cache for:', request.name, hash);
-                        return JSON.parse(row.data);
-                    } else {
-                        var query = new Ground.Query_Builder(trellis);
-                        query.extend(request);
-                        return query.run().then(function (result) {
-                            var sql1 = "REPLACE INTO query_cache (`key`, `hash`, `data`, `timestamp`, `expires`)" + " VALUES (?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + ?)";
-
-                            var sql2 = "INSERT INTO query_logs (`key`, `hash`, `timestamp`, `user`)" + " VALUES (?, ?, UNIX_TIMESTAMP(), ?)";
-                            return ground.db.query(sql1, [request.key, hash, JSON.stringify(result), request.expires * 1000]).then(function () {
-                                return ground.db.query(sql2, [request.key, hash, user.id]);
-                            }).then(function () {
-                                return result;
-                            });
-                        });
-                    }
-                });
-            } else {
-                var query = new Ground.Query_Builder(trellis);
-                query.extend(request);
-                return query.run();
-            }
-        };
-
         Irrigation.query = function (request, user, ground, vineyard) {
             var Fortress = require('vineyard-fortress');
             if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
@@ -1057,6 +1011,16 @@ var Lawn;
 
             if (!request)
                 throw new HttpError('Empty request', 400);
+
+            var validator = require('tv4');
+            if (!validator.validate(request, vineyard.ground.query_schema)) {
+                var error = validator.error;
+                var message = error.dataPath == "" ? error.message : error.message + " for " + error.dataPath.substring(1);
+                throw new Lawn.HttpError(message, 400, 'invalid-query');
+            }
+
+            if (!ground.trellises[request.trellis])
+                throw new Lawn.HttpError('Invalid trellis: ' + request.trellis + '.', 400, 'invalid-trellis');
 
             var trellis = ground.sanitize_trellis_argument(request.trellis);
             var query = new Ground.Query_Builder(trellis);

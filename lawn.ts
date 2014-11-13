@@ -1,8 +1,8 @@
 ///<reference path="defs/socket.io.extension.d.ts"/>
 ///<reference path="defs/express.d.ts"/>
-/// <reference path="lib/references.ts"/>
+/// <reference path="../vineyard/vineyard.d.ts"/>
 
-import when = require('when')
+var when = require('when')
 import MetaHub = require('vineyard-metahub')
 import Ground = require('vineyard-ground')
 import Vineyard = require('vineyard')
@@ -674,7 +674,7 @@ class Lawn extends Vineyard.Bulb {
         var status = error.status || 500
         var message = status == 500 ? 'Server Error' : error.message
         console.log('public http error:', status || 500, error.message, error.stack)
-        res.json(status || 500, {message: message})
+        res.status(status || 500).json({message: message})
       })
   }
 
@@ -744,7 +744,7 @@ class Lawn extends Vineyard.Bulb {
       var response = this.process_error(error, user)
       var status = response.status
       delete response.status
-      res.json(status, response)
+      res.status(status).json(response)
     }
     try {
       this.get_user_from_session(req.sessionID)
@@ -1076,13 +1076,6 @@ module Lawn {
     }
 
     static process(method:string, request:Ground.External_Query_Source, user:Vineyard.IUser, vineyard:Vineyard, socket, callback):Promise {
-      //if (!request.version) {
-      //  return when.reject({
-      //    status: 400,
-      //    key: 'version-required',
-      //    message: "Request requires a version property."
-      //  })
-      //}
       var fortress = vineyard.bulbs.fortress
       var action = Irrigation[method]
       return Irrigation.prepare_fortress(fortress, user)
@@ -1132,7 +1125,7 @@ module Lawn {
             socket.emit('error', response)
         })
     }
-
+/*
     static generate_hash(input:string):string {
       var crypto = require('crypto');
       var name = 'braitsch';
@@ -1183,7 +1176,7 @@ module Lawn {
         return query.run()
       }
     }
-
+*/
     static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
       var Fortress = require('vineyard-fortress')
       if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
@@ -1191,6 +1184,18 @@ module Lawn {
 
       if (!request)
         throw new HttpError('Empty request', 400)
+
+      var validator = require('tv4')
+      if (!validator.validate(request, vineyard.ground.query_schema)) {
+        var error = validator.error
+        var message = error.dataPath == ""
+          ? error.message
+          : error.message + " for " + error.dataPath.substring(1)
+        throw new Lawn.HttpError(message, 400, 'invalid-query')
+      }
+
+      if (!ground.trellises[request.trellis])
+        throw new Lawn.HttpError('Invalid trellis: ' + request.trellis + '.', 400, 'invalid-trellis')
 
       var trellis = ground.sanitize_trellis_argument(request.trellis);
       var query = new Ground.Query_Builder(trellis);
@@ -1580,7 +1585,6 @@ module Lawn {
       return def.promise
     }
   }
-
 }
 
 export = Lawn

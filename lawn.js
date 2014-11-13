@@ -222,7 +222,7 @@ var Lawn = (function (_super) {
             return _this.ground.db.query_single(sql, [username, password]).then(function (user) {
                 console.log('hey', user, [username, password]);
                 if (!user)
-                    throw new Lawn.HttpError('Invalid login info.', 400);
+                    throw new Lawn.HttpError('Invalid username or password.', 400);
 
                 if (user.status === 0)
                     throw new Lawn.HttpError('This account has been disabled.', 403);

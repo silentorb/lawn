@@ -889,6 +889,18 @@ var Lawn = (function (_super) {
             return _this.get_schema(req, res, user);
         }, 'get');
 
+        app.use(function (err, req, res, next) {
+            console.log('e');
+            console.error(err.stack);
+            if (err && err.name == 'SyntaxError') {
+                res.status(400).json({
+                    message: 'Invalid JSON',
+                    key: 'invalid-json'
+                });
+            }
+            next(err);
+        });
+
         port = port || this.config.ports.http;
         console.log('HTTP listening on port ' + port + '.');
 

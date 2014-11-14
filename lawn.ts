@@ -967,6 +967,18 @@ class Lawn extends Vineyard.Bulb {
     this.listen_user_http('/vineyard/facebook/link', (req, res, user)=> this.link_facebook_user(req, res, user), 'post')
     this.listen_user_http('/vineyard/schema', (req, res, user)=> this.get_schema(req, res, user), 'get')
 
+    app.use(function(err, req, res, next){
+      console.log('e')
+      console.error(err.stack)
+      if (err && err.name == 'SyntaxError') {
+        res.status(400).json({
+          message: 'Invalid JSON',
+          key: 'invalid-json'
+        })
+      }
+      next(err)
+    })
+
     port = port || this.config.ports.http
     console.log('HTTP listening on port ' + port + '.')
 

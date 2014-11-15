@@ -1,6 +1,7 @@
 /// <reference path="defs/socket.io.extension.d.ts" />
 /// <reference path="defs/express.d.ts" />
 /// <reference path="../vineyard/vineyard.d.ts" />
+/// <reference path="lib/common.d.ts" />
 declare class Lawn extends Vineyard.Bulb {
     public io: any;
     public instance_sockets: {};
@@ -36,6 +37,8 @@ declare class Lawn extends Vineyard.Bulb {
     public password_reset_request(req: any, res: any, body: any): Promise;
     public create_password_reset_entry(user_id: any): Promise;
     static create_session(user: any, req: any, ground: any): Promise;
+    public create_user_service(http_path: string, socket_path: string, authorization: (user: any, fortress: any) => any, validation: string, action: (data: any, user: any) => Promise): void;
+    public check_service(data: any, user: any, authorization: (user: any, fortress: any) => any, validation: string): Promise;
     public send_http_login_success(req: any, res: any, user: any): void;
     public register(req: any, res: any): Promise;
     public link_facebook_user(req: any, res: any, user: any): Promise;
@@ -61,6 +64,7 @@ declare class Lawn extends Vineyard.Bulb {
     public user_is_online(id: number): boolean;
 }
 declare module Lawn {
+    var HttpError: any;
     interface Session_Store_DB {
         host: string;
         port: number;
@@ -96,25 +100,12 @@ declare module Lawn {
         objects: any[];
         version?: number;
     }
-    class HttpError {
-        public name: string;
-        public message: any;
-        public stack: any;
-        public status: any;
-        public details: any;
-        public key: any;
-        constructor(message: string, status?: number, key?: any);
-    }
-    class Authorization_Error extends HttpError {
-        public details: any;
-        constructor(message: string, details: any);
-    }
     class Irrigation {
         static prepare_fortress(fortress: any, user: any): Promise;
         static process(method: string, request: Ground.External_Query_Source, user: Vineyard.IUser, vineyard: Vineyard, socket: any, callback: any): Promise;
         static query(request: Ground.External_Query_Source, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
         static run_query(query: Ground.Query_Builder, user: Vineyard.IUser, vineyard: Vineyard, request: Ground.External_Query_Source): Promise;
-        static update(request: Update_Request, user: Vineyard.IUser, ground: Ground.Core, vineyard: Vineyard): Promise;
+        static update(request: Update_Request, user: any, ground: Ground.Core, vineyard: Vineyard): Promise;
     }
     class Facebook extends Vineyard.Bulb {
         public lawn: Lawn;

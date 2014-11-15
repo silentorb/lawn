@@ -13,6 +13,16 @@ module.exports = function (grunt) {
           target: 'es5',            // 'es3' (default) | 'es5'
           module: 'commonjs',       // 'amd' (default) | 'commonjs'
           declaration: true,       // true | false  (default)
+          verbose: true,
+          removeComments: false
+        }
+      },
+      lib: {                                 // a particular target
+        src: ["lib/*.ts"],        // The source typescript files, http://gruntjs.com/configuring-tasks#files
+        options: {                    // use to override the default options, http://gruntjs.com/configuring-tasks#options
+          target: 'es5',            // 'es3' (default) | 'es5'
+          module: 'commonjs',       // 'amd' (default) | 'commonjs'
+          declaration: false,       // true | false  (default)
           verbose: true
         }
       }
@@ -31,8 +41,12 @@ module.exports = function (grunt) {
     },
     watch: {
       lawn: {
-        files: 'lawn.ts',
-        tasks: ['default']
+        files: ['lawn.ts'],
+        tasks: ['ts:lawn', 'replace']
+      },
+      lib: {
+        files: ['lib/*.ts'],
+        tasks: ['ts:lib']
       }
     }
   })

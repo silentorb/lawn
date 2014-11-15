@@ -8,6 +8,9 @@ var when = require('when');
 var MetaHub = require('vineyard-metahub');
 var Ground = require('vineyard-ground');
 var Vineyard = require('vineyard');
+var common = require('./lib/common');
+var HttpError = common.HttpError;
+var Authorization_Error = common.Authorization_Error;
 
 var Lawn = (function (_super) {
     __extends(Lawn, _super);
@@ -188,13 +191,13 @@ var Lawn = (function (_super) {
 
         return query.run_single().then(function (session) {
             if (!session)
-                throw new Lawn.HttpError('Session not found.', 401);
+                throw new HttpError('Session not found.', 401);
 
             if (session.token === 0)
-                throw new Lawn.HttpError('Invalid session.', 401);
+                throw new HttpError('Invalid session.', 401);
 
             if (typeof session.user !== 'object')
-                throw new Lawn.HttpError('User not found.', 401);
+                throw new HttpError('User not found.', 401);
 
             var user = session.user;
 
@@ -222,10 +225,10 @@ var Lawn = (function (_super) {
             return _this.ground.db.query_single(sql, [username, password]).then(function (user) {
                 console.log('hey', user, [username, password]);
                 if (!user)
-                    throw new Lawn.HttpError('Invalid username or password.', 400);
+                    throw new HttpError('Invalid username or password.', 400);
 
                 if (user.status === 0)
-                    throw new Lawn.HttpError('This account has been disabled.', 403);
+                    throw new HttpError('This account has been disabled.', 403);
 
                 password = user.new_password;
                 delete user.new_password;
@@ -237,13 +240,13 @@ var Lawn = (function (_super) {
             });
         }).then(function (user) {
             if (!user)
-                throw new Lawn.HttpError('Invalid login info.', 400);
+                throw new HttpError('Invalid login info.', 400);
 
             if (user.status === 0)
-                throw new Lawn.HttpError('This account has been disabled.', 403);
+                throw new HttpError('This account has been disabled.', 403);
 
             if (user.status === 2)
-                throw new Lawn.HttpError('This account is awaiting email verification.', 403);
+                throw new HttpError('This account is awaiting email verification.', 403);
 
             _this.invoke('user.login', user, body).then(function () {
                 return Lawn.create_session(user, req, _this.ground).then(function () {
@@ -365,6 +368,69 @@ var Lawn = (function (_super) {
         });
     };
 
+    Lawn.prototype.create_user_service = function (http_path, socket_path, authorization, validation, action) {
+        var _this = this;
+        var validation_file = null;
+        if (validation) {
+            var code_file_path = Error()['stack'].split("\n")[3].match(/\((.+?):\d/)[1];
+            var Path = require('path');
+            var dir = Path.dirname(code_file_path);
+            validation_file = Path.resolve(dir, validation);
+            console.log('validation', validation_file);
+            this.vineyard.add_json_schema(validation_file, validation_file);
+        }
+
+        if (http_path) {
+            if (http_path[0] != '/')
+                http_path = '/' + http_path;
+
+            this.app.post(http_path, function (req, res) {
+                var user = null;
+
+                when.resolve().then(function () {
+                    return _this.get_user_from_session(req.sessionID);
+                }).then(function (u) {
+                    user = u;
+                    return _this.check_service(req.body, user, authorization, validation_file);
+                }).then(function () {
+                    return action(req.body, user);
+                }).done(function (response) {
+                    res.send(response);
+                }, function (error) {
+                    var response = _this.process_error(error, user);
+                    var status = response.status;
+                    delete response.status;
+                    res.status(status).json(response);
+                });
+            });
+        }
+    };
+
+    Lawn.prototype.check_service = function (data, user, authorization, validation) {
+        if (authorization != null) {
+            var fortress = this.vineyard.bulbs.fortress;
+            var access = authorization(user, fortress);
+            if (!access)
+                throw new Authorization_Error('Unauthorized');
+        }
+
+        if (validation) {
+            var error = this.vineyard.find_schema_errors(data, validation);
+            if (error) {
+                var message = null;
+                if (error.code == 303) {
+                    message = "Unsupported property: " + error.dataPath.substring(1);
+                } else {
+                    message = error.dataPath == "" ? error.message : error.message + " for " + error.dataPath.substring(1);
+                }
+
+                throw new HttpError(message, 400, 'invalid-structure');
+            }
+        }
+
+        return when.resolve();
+    };
+
     Lawn.prototype.send_http_login_success = function (req, res, user) {
         var query = this.ground.create_query('user');
         query.add_key_filter(user.id);
@@ -382,18 +448,18 @@ var Lawn = (function (_super) {
         var body = req.body, username = body.username, email = body.email, password = body.password, phone = body.phone, facebook_token = body.facebook_token, display_name = body[this.config.display_name_key];
 
         if (typeof username != 'string' || username.length > 32 || !username.match(this.config.valid_username))
-            return when.reject(new Lawn.HttpError('Invalid username.', 400));
+            return when.reject(new HttpError('Invalid username.', 400));
 
         if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
-            return when.reject(new Lawn.HttpError('Invalid email address.', 400));
+            return when.reject(new HttpError('Invalid email address.', 400));
 
         if (typeof password != 'string' || password.length > 32 || !password.match(this.config.valid_password))
-            return when.reject(new Lawn.HttpError('Invalid username.', 400));
+            return when.reject(new HttpError('Invalid username.', 400));
 
         if (typeof display_name != 'string')
             display_name = null;
         else if (!display_name.match(this.config.valid_display_name))
-            return when.reject(new Lawn.HttpError("Invalid " + this.config.display_name_key, 400));
+            return when.reject(new HttpError("Invalid " + this.config.display_name_key, 400));
 
         var register = function (facebook_id) {
             if (typeof facebook_id === "undefined") { facebook_id = undefined; }
@@ -411,7 +477,7 @@ var Lawn = (function (_super) {
 
             return _this.ground.db.query(sql, args).then(function (rows) {
                 if (rows.length > 0)
-                    return when.reject(new Lawn.HttpError('That ' + rows[0].value + ' is already taken.', 400));
+                    return when.reject(new HttpError('That ' + rows[0].value + ' is already taken.', 400));
 
                 var gender = body.gender;
                 if (gender !== 'male' && gender !== 'female')
@@ -680,16 +746,16 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.listen_user_http = function (path, action, method) {
-        if (typeof method === "undefined") { method = 'post'; }
         var _this = this;
+        if (typeof method === "undefined") { method = 'post'; }
         this.app[method](path, function (req, res) {
             _this.process_user_http(req, res, action);
         });
     };
 
     Lawn.prototype.start_sockets = function (port) {
-        if (typeof port === "undefined") { port = null; }
         var _this = this;
+        if (typeof port === "undefined") { port = null; }
         var socket_io = require('socket.io');
         port = port || this.config.ports.websocket;
         console.log('Starting Socket.IO on port ' + port);
@@ -726,14 +792,14 @@ var Lawn = (function (_super) {
         var guid = req.params.guid;
         var ext = req.params.ext;
         if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/))
-            throw new Lawn.HttpError('Invalid File Name', 400);
+            throw new HttpError('Invalid File Name', 400);
 
         var path = require('path');
         var filepath = path.join(this.vineyard.root_path, this.config.file_path || 'files', guid + '.' + ext);
         console.log(filepath);
         return Lawn.file_exists(filepath).then(function (exists) {
             if (!exists)
-                throw new Lawn.HttpError('File Not Found', 404);
+                throw new HttpError('File Not Found', 404);
 
             var query = _this.ground.create_query('file');
             query.add_key_filter(req.params.guid);
@@ -743,7 +809,7 @@ var Lawn = (function (_super) {
                 if (result.access)
                     res.sendfile(filepath);
                 else
-                    throw new Lawn.HttpError('Access Denied', 403);
+                    throw new HttpError('Access Denied', 403);
             });
         });
     };
@@ -854,10 +920,10 @@ var Lawn = (function (_super) {
             var file = req.files.file;
             var guid = info.guid;
             if (!guid)
-                throw new Lawn.HttpError('guid is empty.', 400);
+                throw new HttpError('guid is empty.', 400);
 
             if (!guid.match(/[\w\-]+/))
-                throw new Lawn.HttpError('Invalid guid.', 400);
+                throw new HttpError('Invalid guid.', 400);
 
             var path = require('path');
             var ext = path.extname(file.originalFilename) || '';
@@ -878,6 +944,9 @@ var Lawn = (function (_super) {
                 _this.invoke('file.uploaded', object);
             });
         });
+
+        var gardener = require('./lib/gardener');
+        gardener.grow(this);
 
         this.listen_user_http('/file/:guid.:ext', function (req, res, user) {
             return _this.file_download(req, res, user);
@@ -950,28 +1019,7 @@ var Lawn = (function (_super) {
 
 var Lawn;
 (function (Lawn) {
-    var HttpError = (function () {
-        function HttpError(message, status, key) {
-            if (typeof status === "undefined") { status = 500; }
-            if (typeof key === "undefined") { key = undefined; }
-            this.name = "HttpError";
-            this.message = message;
-            this.status = status;
-            this.key = key;
-        }
-        return HttpError;
-    })();
-    Lawn.HttpError = HttpError;
-
-    var Authorization_Error = (function (_super) {
-        __extends(Authorization_Error, _super);
-        function Authorization_Error(message, details) {
-            _super.call(this, message, 403);
-            this.details = details;
-        }
-        return Authorization_Error;
-    })(HttpError);
-    Lawn.Authorization_Error = Authorization_Error;
+    Lawn.HttpError;
 
     var Irrigation = (function () {
         function Irrigation() {
@@ -1033,10 +1081,10 @@ var Lawn;
         Irrigation.query = function (request, user, ground, vineyard) {
             var Fortress = require('vineyard-fortress');
             if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
-                throw new HttpError('The request must have a version property.', 400, 'version-required');
+                throw new Lawn.HttpError('The request must have a version property.', 400, 'version-required');
 
             if (!request)
-                throw new HttpError('Empty request', 400);
+                throw new Lawn.HttpError('Empty request', 400);
 
             var validator = require('tv4');
             if (!validator.validate(request, vineyard.ground.query_schema)) {
@@ -1058,7 +1106,7 @@ var Lawn;
                     if (result.is_allowed)
                         return Irrigation.run_query(query, user, vineyard, request);
                     else {
-                        throw new Authorization_Error(result.get_message(), result);
+                        throw new Authorization_Error(result.get_message());
                     }
                 });
             } else {
@@ -1101,20 +1149,20 @@ var Lawn;
 
         Irrigation.update = function (request, user, ground, vineyard) {
             if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
-                throw new HttpError('The request must have a version property.', 400, 'version-required');
+                throw new Lawn.HttpError('The request must have a version property.', 400, 'version-required');
 
             if (user.id == 2)
-                throw new HttpError('Anonymous cannot create content.', 403);
+                throw new Lawn.HttpError('Anonymous cannot create content.', 403);
 
             if (!MetaHub.is_array(request.objects))
-                throw new HttpError('Update is missing objects list.', 400);
+                throw new Lawn.HttpError('Update is missing objects list.', 400);
 
             var updates = request.objects.map(function (object) {
                 return ground.create_update(object.trellis, object, user);
             });
 
             if (!request.objects)
-                throw new HttpError('Request requires an objects array', 400);
+                throw new Lawn.HttpError('Request requires an objects array', 400);
 
             var fortress = vineyard.bulbs.fortress;
             if (fortress) {
@@ -1129,7 +1177,7 @@ var Lawn;
                             };
                         });
                     } else
-                        throw new Authorization_Error('You are not authorized to perform this update', result);
+                        throw new Authorization_Error('You are not authorized to perform this update');
                 });
             } else {
                 return when.all(updates.map(function (update) {
@@ -1279,8 +1327,8 @@ var Lawn;
         };
 
         Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
-            if (typeof store === "undefined") { store = true; }
             var _this = this;
+            if (typeof store === "undefined") { store = true; }
             var ground = this.lawn.ground;
             var users = users.map(function (x) {
                 return typeof x == 'object' ? x.id : x;
@@ -1405,6 +1453,7 @@ var Lawn;
     })();
     Lawn.Mail = Mail;
 })(Lawn || (Lawn = {}));
+Lawn.HttpError = common.HttpError;
 
 module.exports = Lawn;
 //# sourceMappingURL=lawn.js.map

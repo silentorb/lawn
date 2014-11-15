@@ -1,11 +1,15 @@
 ///<reference path="defs/socket.io.extension.d.ts"/>
 ///<reference path="defs/express.d.ts"/>
 /// <reference path="../vineyard/vineyard.d.ts"/>
+/// <reference path="lib/common.ts"/>
 
 var when = require('when')
 import MetaHub = require('vineyard-metahub')
 import Ground = require('vineyard-ground')
 import Vineyard = require('vineyard')
+import common = require('./lib/common')
+var HttpError = common.HttpError
+var Authorization_Error = common.Authorization_Error
 
 declare var Irrigation
 
@@ -217,13 +221,13 @@ class Lawn extends Vineyard.Bulb {
       .then((session) => {
         //console.log('session', session)
         if (!session)
-          throw new Lawn.HttpError('Session not found.', 401)
+          throw new HttpError('Session not found.', 401)
 
         if (session.token === 0)
-          throw new Lawn.HttpError('Invalid session.', 401)
+          throw new HttpError('Invalid session.', 401)
 
         if (typeof session.user !== 'object')
-          throw new Lawn.HttpError('User not found.', 401)
+          throw new HttpError('User not found.', 401)
 
         var user = session.user
 
@@ -258,10 +262,10 @@ class Lawn extends Vineyard.Bulb {
           .then((user)=> {
             console.log('hey', user, [username, password])
             if (!user)
-              throw new Lawn.HttpError('Invalid username or password.', 400)
+              throw new HttpError('Invalid username or password.', 400)
 
             if (user.status === 0)
-              throw new Lawn.HttpError('This account has been disabled.', 403)
+              throw new HttpError('This account has been disabled.', 403)
 
             password = user.new_password
             delete user.new_password
@@ -274,13 +278,13 @@ class Lawn extends Vineyard.Bulb {
       })
       .then((user)=> {
         if (!user)
-          throw new Lawn.HttpError('Invalid login info.', 400)
+          throw new HttpError('Invalid login info.', 400)
 
         if (user.status === 0)
-          throw new Lawn.HttpError('This account has been disabled.', 403)
+          throw new HttpError('This account has been disabled.', 403)
 
         if (user.status === 2)
-          throw new Lawn.HttpError('This account is awaiting email verification.', 403)
+          throw new HttpError('This account is awaiting email verification.', 403)
 
         this.invoke('user.login', user, body)
           .then(()=> {
@@ -419,6 +423,76 @@ class Lawn extends Vineyard.Bulb {
       .then(() => session)
   }
 
+  create_user_service(http_path:string, socket_path:string, authorization:(user, fortress)=>any,
+                      validation:string, action:(data, user)=>Promise) {
+
+    var validation_file = null
+    if (validation) {
+      var code_file_path = Error()['stack'].split("\n")[3].match(/\((.+?):\d/)[1]
+      var Path = require('path')
+      var dir = Path.dirname(code_file_path)
+      validation_file = Path.resolve(dir, validation)
+      console.log('validation', validation_file)
+      this.vineyard.add_json_schema(validation_file, validation_file)
+    }
+
+    if (http_path) {
+      if (http_path[0] != '/')
+        http_path = '/' + http_path
+
+      this.app.post(http_path, (req, res)=> {
+          var user = null
+          // Start with a promise so all possible errors (short of one inside when.js) are
+          // handled through promise rejections.  Otherwise we would need a try/catch here
+          // and redundant error handling.
+          when.resolve()
+            .then(()=> this.get_user_from_session(req.sessionID))
+            .then((u)=> {
+              user = u
+              return this.check_service(req.body, user, authorization, validation_file)
+            })
+            .then(()=> action(req.body, user))
+            .done((response)=> {
+              res.send(response)
+            }, (error)=> {
+              var response = this.process_error(error, user)
+              var status = response.status
+              delete response.status
+              res.status(status).json(response)
+            })
+        }
+      )
+    }
+  }
+
+  check_service(data, user, authorization:(user, fortress)=>any, validation:string):Promise {
+    if (authorization != null) {
+      var fortress = this.vineyard.bulbs.fortress
+      var access = authorization(user, fortress)
+      if (!access)
+        throw new Authorization_Error('Unauthorized')
+    }
+
+    if (validation) {
+      var error = this.vineyard.find_schema_errors(data, validation)
+      if (error) {
+        var message = null
+        if (error.code == 303) {
+          message = "Unsupported property: " + error.dataPath.substring(1)
+        }
+        else {
+          message = error.dataPath == ""
+            ? error.message
+            : error.message + " for " + error.dataPath.substring(1)
+        }
+
+        throw new HttpError(message, 400, 'invalid-structure')
+      }
+    }
+
+    return when.resolve()
+  }
+
   send_http_login_success(req, res, user) {
     var query = this.ground.create_query('user')
     query.add_key_filter(user.id)
@@ -443,18 +517,18 @@ class Lawn extends Vineyard.Bulb {
       display_name = body[this.config.display_name_key]
 
     if (typeof username != 'string' || username.length > 32 || !username.match(this.config.valid_username))
-      return when.reject(new Lawn.HttpError('Invalid username.', 400))
+      return when.reject(new HttpError('Invalid username.', 400))
 
     if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
-      return when.reject(new Lawn.HttpError('Invalid email address.', 400))
+      return when.reject(new HttpError('Invalid email address.', 400))
 
     if (typeof password != 'string' || password.length > 32 || !password.match(this.config.valid_password))
-      return when.reject(new Lawn.HttpError('Invalid username.', 400))
+      return when.reject(new HttpError('Invalid username.', 400))
 
     if (typeof display_name != 'string')
       display_name = null
     else if (!display_name.match(this.config.valid_display_name))
-      return when.reject(new Lawn.HttpError("Invalid " + this.config.display_name_key, 400))
+      return when.reject(new HttpError("Invalid " + this.config.display_name_key, 400))
 
     var register = (facebook_id = undefined)=> {
       var args = [body.username]
@@ -472,7 +546,7 @@ class Lawn extends Vineyard.Bulb {
       return this.ground.db.query(sql, args)
         .then((rows)=> {
           if (rows.length > 0)
-            return when.reject(new Lawn.HttpError('That ' + rows[0].value + ' is already taken.', 400))
+            return when.reject(new HttpError('That ' + rows[0].value + ' is already taken.', 400))
 
           // Not so worried about invalid gender, just filter it
           var gender = body.gender
@@ -557,7 +631,7 @@ class Lawn extends Vineyard.Bulb {
 //        return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
 //          .then((row)=> {
 //            if (row)
-//              return when.reject(new Lawn.HttpError('That facebook id is already attached to a user.', 400))
+//              return when.reject(new HttpError('That facebook id is already attached to a user.', 400))
 
         console.log('connect-fb-user', {
           id: user.id,
@@ -576,7 +650,8 @@ class Lawn extends Vineyard.Bulb {
       })
   }
 
-  static request(options, data = null, secure = false):Promise {
+  static
+  request(options, data = null, secure = false):Promise {
     var def = when.defer()
     var http = require(secure ? 'https' : 'http')
 //    if (secure)
@@ -672,7 +747,8 @@ class Lawn extends Vineyard.Bulb {
     });
   }
 
-  static process_public_http(req, res, action) {
+  static
+  process_public_http(req, res, action) {
     action(req, res)
       .done(()=> {
       }, (error)=> {
@@ -709,7 +785,8 @@ class Lawn extends Vineyard.Bulb {
     })
   }
 
-  static listen_public_http(app, path, action, method = 'post') {
+  static
+  listen_public_http(app, path, action, method = 'post') {
     app[method](path, (req, res)=>
         Lawn.process_public_http(req, res, action)
     )
@@ -808,7 +885,7 @@ class Lawn extends Vineyard.Bulb {
     var guid = req.params.guid;
     var ext = req.params.ext;
     if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/))
-      throw new Lawn.HttpError('Invalid File Name', 400)
+      throw new HttpError('Invalid File Name', 400)
 
     var path = require('path')
     var filepath = path.join(this.vineyard.root_path, this.config.file_path || 'files', guid + '.' + ext)
@@ -816,7 +893,7 @@ class Lawn extends Vineyard.Bulb {
     return Lawn.file_exists(filepath)
       .then((exists)=> {
         if (!exists)
-          throw new Lawn.HttpError('File Not Found', 404)
+          throw new HttpError('File Not Found', 404)
 //          throw new Error('File Not Found')
 
         var query = this.ground.create_query('file')
@@ -828,12 +905,13 @@ class Lawn extends Vineyard.Bulb {
             if (result.access)
               res.sendfile(filepath)
             else
-              throw new Lawn.HttpError('Access Denied', 403)
+              throw new HttpError('Access Denied', 403)
           })
       })
   }
 
-  private static file_exists(filepath:string):Promise {
+  private static
+  file_exists(filepath:string):Promise {
     var fs = require('fs'), def = when.defer()
     fs.exists(filepath, (exists)=> {
       def.resolve(exists)
@@ -935,10 +1013,10 @@ class Lawn extends Vineyard.Bulb {
       var file = req.files.file;
       var guid = info.guid;
       if (!guid)
-        throw new Lawn.HttpError('guid is empty.', 400)
+        throw new HttpError('guid is empty.', 400)
 
       if (!guid.match(/[\w\-]+/))
-        throw new Lawn.HttpError('Invalid guid.', 400)
+        throw new HttpError('Invalid guid.', 400)
 
       var path = require('path')
       var ext = path.extname(file.originalFilename) || ''
@@ -962,12 +1040,15 @@ class Lawn extends Vineyard.Bulb {
         })
     })
 
+    var gardener = require('./lib/gardener')
+    gardener.grow(this)
+
 //    this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
     this.listen_user_http('/file/:guid.:ext', (req, res, user)=> this.file_download(req, res, user), 'get')
     this.listen_user_http('/vineyard/facebook/link', (req, res, user)=> this.link_facebook_user(req, res, user), 'post')
     this.listen_user_http('/vineyard/schema', (req, res, user)=> this.get_schema(req, res, user), 'get')
 
-    app.use(function(err, req, res, next){
+    app.use(function (err, req, res, next) {
       console.log('e')
       console.error(err.stack)
       if (err && err.name == 'SyntaxError') {
@@ -1014,7 +1095,8 @@ class Lawn extends Vineyard.Bulb {
     console.log('Lawn is stopped.')
   }
 
-  public user_is_online(id:number) {
+  public
+  user_is_online(id:number) {
     if (!this.io)
       return false
 
@@ -1024,6 +1106,8 @@ class Lawn extends Vineyard.Bulb {
 }
 
 module Lawn {
+
+  export var HttpError
 
   export interface Session_Store_DB {
     host:string
@@ -1062,30 +1146,6 @@ module Lawn {
   export interface Update_Request {
     objects:any[]
     version?:number
-  }
-
-  export class HttpError {
-    name = "HttpError"
-    message
-    stack
-    status
-    details
-    key
-
-    constructor(message:string, status = 500, key = undefined) {
-      this.message = message
-      this.status = status
-      this.key = key
-    }
-  }
-
-  export class Authorization_Error extends HttpError {
-    details
-
-    constructor(message:string, details) {
-      super(message, 403)
-      this.details = details
-    }
   }
 
   export class Irrigation {
@@ -1147,58 +1207,59 @@ module Lawn {
             socket.emit('error', response)
         })
     }
-/*
-    static generate_hash(input:string):string {
-      var crypto = require('crypto');
-      var name = 'braitsch';
-      return crypto.createHash('md5').update(name).digest('hex');
-    }
 
-    static query_with_cache(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
-      if (vineyard.bulbs['lawn'].config.cache_queries !== true) {
-        return Irrigation.query(request, user, ground, vineyard)
-      }
+    /*
+     static generate_hash(input:string):string {
+     var crypto = require('crypto');
+     var name = 'braitsch';
+     return crypto.createHash('md5').update(name).digest('hex');
+     }
 
-      if (!request)
-        throw new HttpError('Empty request', 400)
+     static query_with_cache(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+     if (vineyard.bulbs['lawn'].config.cache_queries !== true) {
+     return Irrigation.query(request, user, ground, vineyard)
+     }
 
-      var trellis = ground.sanitize_trellis_argument(request.trellis);
-      if (typeof request.key == 'string' && typeof request.expires == 'number' && request.expires > 0) {
-        var hash = Irrigation.generate_hash(JSON.stringify(request))
-        console.log('hash', hash)
-        var sql = "SELECT * FROM query_cache WHERE (expires = 0 || expires > UNIX_TIMESTAMP()) AND hash = ?"
-        return ground.db.query_single(sql, [hash])
-          .then((row)=> {
-            console.log('row', row)
-            if (row) {
-              console.log('using query cache for:', request.name, hash)
-              return JSON.parse(row.data)
-            }
-            else {
-              var query = new Ground.Query_Builder(trellis);
-              query.extend(request)
-              return query.run()
-                .then((result)=> {
-                  var sql1 = "REPLACE INTO query_cache (`key`, `hash`, `data`, `timestamp`, `expires`)"
-                    + " VALUES (?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + ?)"
+     if (!request)
+     throw new HttpError('Empty request', 400)
 
-                  var sql2 = "INSERT INTO query_logs (`key`, `hash`, `timestamp`, `user`)"
-                    + " VALUES (?, ?, UNIX_TIMESTAMP(), ?)"
-                  return ground.db.query(sql1, [request.key, hash, JSON.stringify(result), request.expires * 1000])
-                    .then(()=> ground.db.query(sql2, [request.key, hash, user.id]))
-                    .then(()=> result)
-                })
+     var trellis = ground.sanitize_trellis_argument(request.trellis);
+     if (typeof request.key == 'string' && typeof request.expires == 'number' && request.expires > 0) {
+     var hash = Irrigation.generate_hash(JSON.stringify(request))
+     console.log('hash', hash)
+     var sql = "SELECT * FROM query_cache WHERE (expires = 0 || expires > UNIX_TIMESTAMP()) AND hash = ?"
+     return ground.db.query_single(sql, [hash])
+     .then((row)=> {
+     console.log('row', row)
+     if (row) {
+     console.log('using query cache for:', request.name, hash)
+     return JSON.parse(row.data)
+     }
+     else {
+     var query = new Ground.Query_Builder(trellis);
+     query.extend(request)
+     return query.run()
+     .then((result)=> {
+     var sql1 = "REPLACE INTO query_cache (`key`, `hash`, `data`, `timestamp`, `expires`)"
+     + " VALUES (?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + ?)"
 
-            }
-          })
-      }
-      else {
-        var query = new Ground.Query_Builder(trellis);
-        query.extend(request)
-        return query.run()
-      }
-    }
-*/
+     var sql2 = "INSERT INTO query_logs (`key`, `hash`, `timestamp`, `user`)"
+     + " VALUES (?, ?, UNIX_TIMESTAMP(), ?)"
+     return ground.db.query(sql1, [request.key, hash, JSON.stringify(result), request.expires * 1000])
+     .then(()=> ground.db.query(sql2, [request.key, hash, user.id]))
+     .then(()=> result)
+     })
+
+     }
+     })
+     }
+     else {
+     var query = new Ground.Query_Builder(trellis);
+     query.extend(request)
+     return query.run()
+     }
+     }
+     */
     static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
       var Fortress = require('vineyard-fortress')
       if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
@@ -1213,11 +1274,11 @@ module Lawn {
         var message = error.dataPath == ""
           ? error.message
           : error.message + " for " + error.dataPath.substring(1)
-        throw new Lawn.HttpError(message, 400, 'invalid-query')
+        throw new HttpError(message, 400, 'invalid-query')
       }
 
       if (!ground.trellises[request.trellis])
-        throw new Lawn.HttpError('Invalid trellis: ' + request.trellis + '.', 400, 'invalid-trellis')
+        throw new HttpError('Invalid trellis: ' + request.trellis + '.', 400, 'invalid-trellis')
 
       var trellis = ground.sanitize_trellis_argument(request.trellis);
       var query = new Ground.Query_Builder(trellis);
@@ -1230,7 +1291,7 @@ module Lawn {
             if (result.is_allowed)
               return Irrigation.run_query(query, user, vineyard, request)
             else {
-              throw new Authorization_Error(result.get_message(), result)
+              throw new Authorization_Error(result.get_message())
             }
           })
       }
@@ -1278,7 +1339,7 @@ module Lawn {
         })
     }
 
-    static update(request:Update_Request, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
+    static update(request:Update_Request, user, ground:Ground.Core, vineyard:Vineyard):Promise {
       if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
         throw new HttpError('The request must have a version property.', 400, 'version-required')
 
@@ -1309,7 +1370,7 @@ module Lawn {
                 })
             }
             else
-              throw new Authorization_Error('You are not authorized to perform this update', result)
+              throw new Authorization_Error('You are not authorized to perform this update')
           })
       }
       else {
@@ -1366,7 +1427,7 @@ module Lawn {
         .then((facebook_id)=> {
           console.log('fb-user', facebook_id)
           if (!facebook_id) {
-            return when.resolve(new Lawn.HttpError('Invalid facebook login info.', 400))
+            return when.resolve(new HttpError('Invalid facebook login info.', 400))
           }
 
           return this.ground.db.query_single("SELECT id, username FROM users WHERE facebook_id = ?", [facebook_id])
@@ -1374,7 +1435,7 @@ module Lawn {
               if (user)
                 return user
 
-              throw new Lawn.HttpError('That Facebook user id is not yet connected to an account.  Redirect to registration.', 300)
+              throw new HttpError('That Facebook user id is not yet connected to an account.  Redirect to registration.', 300)
 //              return when.reject({ status: 300, message: 'That Facebook user id is not yet connected to an account.  Redirect to registration.' })
 
 //              var options = {
@@ -1395,7 +1456,7 @@ module Lawn {
 
     get_user_facebook_id(body):Promise {
       if (typeof body.facebook_token != 'string' && typeof body.facebook_token != 'number')
-        throw new Lawn.HttpError('Requires either valid facebook user id or email address.', 400)
+        throw new HttpError('Requires either valid facebook user id or email address.', 400)
 
       var options = {
         host: 'graph.facebook.com',
@@ -1534,10 +1595,10 @@ module Lawn {
       return query.run_single()
         .then((object)=> {
           if (!object)
-            throw new Lawn.HttpError('Could not find a notification with that id and target user.', 400)
+            throw new HttpError('Could not find a notification with that id and target user.', 400)
 
           if (object.received)
-            throw new Lawn.HttpError('That notification was already marked as received.', 400)
+            throw new HttpError('That notification was already marked as received.', 400)
 
           return ground.update_object('notification_target', {
             id: object.id,
@@ -1608,5 +1669,6 @@ module Lawn {
     }
   }
 }
+Lawn.HttpError = common.HttpError
 
 export = Lawn

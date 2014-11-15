@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "socket": {
+      "type": "object",
+      "properties": {
+        "log":{
+          "type":"boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

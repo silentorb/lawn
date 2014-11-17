@@ -22,7 +22,15 @@ function set_config(data, lawn) {
 }
 
 export function grow(lawn) {
-  //lawn.listen_user_http('/vineyard/gardener/config', (req, res, user)=> set_config(req, res, user, lawn))
-  lawn.create_user_service('vineyard/gardener/config', 'gardener/config',
-    common.is_admin, '../validation/gardener-config.json', (data)=> set_config(data, lawn))
+  var Path = require('path')
+  lawn.vineyard.load_json_schema('gardener-config', Path.resolve(__dirname, '../validation/gardener-config.json'))
+  lawn.add_service({
+    http_path: 'vineyard/gardener/config',
+    socket_path:'gardener/config',
+    authorization: common.is_admin,
+    validation: 'gardener-config',
+    action: (data)=> (data)=> set_config(data, lawn)
+  })
+  //lawn.create_user_service('vineyard/gardener/config', 'gardener/config',
+  //  common.is_admin, '../validation/gardener-config.json', (data)=> set_config(data, lawn))
 }

@@ -1,17 +1,17 @@
 ///<reference path="defs/socket.io.extension.d.ts"/>
 ///<reference path="defs/express.d.ts"/>
-/// <reference path="../vineyard/vineyard.d.ts"/>
 /// <reference path="lib/common.ts"/>
+/// <reference path="lib/irrigation.ts"/>
 
 var when = require('when')
 import MetaHub = require('vineyard-metahub')
 import Ground = require('vineyard-ground')
 import Vineyard = require('vineyard')
 import common = require('./lib/common')
+import irrigation = require('./lib/irrigation')
+
 var HttpError = common.HttpError
 var Authorization_Error = common.Authorization_Error
-
-declare var Irrigation
 
 interface User_Source {
   name?:string
@@ -37,6 +37,8 @@ class Lawn extends Vineyard.Bulb {
   debug_mode:boolean = false
   mail:Lawn.Mail = null
   password_reset_template:string = null
+
+  private services:common.Service_Definition[] = []
 
   grow() {
     var ground = this.ground
@@ -77,10 +79,14 @@ class Lawn extends Vineyard.Bulb {
     this.config['valid_display_name'] = typeof this.config.valid_display_name == 'string'
       ? new RegExp(this.config.valid_display_name)
       : /^[A-Za-z\- _0-9!@#\$%\^&\*\(\)?]+$/
+
+    irrigation.grow(this)
+
+    var gardener = require('./lib/gardener')
+    gardener.grow(this)
   }
 
-  static
-  authorization(handshakeData, callback) {
+  static authorization(handshakeData, callback) {
     return callback(null, true);
   }
 
@@ -115,11 +121,11 @@ class Lawn extends Vineyard.Bulb {
     socket.join('user/' + user.id)
 
     socket.on('query', (request, callback)=>
-        Lawn.Irrigation.process('query', request, user, this.vineyard, socket, callback)
+        irrigation.process('query', request, user, this.vineyard, socket, callback)
     )
 
     socket.on('update', (request, callback)=>
-        Lawn.Irrigation.process('update', request, user, this.vineyard, socket, callback)
+        irrigation.process('update', request, user, this.vineyard, socket, callback)
     )
 
     this.on_socket(socket, 'room/join', user, (request)=> {
@@ -423,24 +429,32 @@ class Lawn extends Vineyard.Bulb {
       .then(() => session)
   }
 
-  create_user_service(http_path:string, socket_path:string, authorization:(user, fortress)=>any,
-                      validation:string, action:(data, user)=>Promise) {
+  add_service(definition:common.Service_Definition) {
+    this.services.push(definition)
+  }
 
-    var validation_file = null
-    if (validation) {
-      var code_file_path = Error()['stack'].split("\n")[3].match(/\((.+?):\d/)[1]
-      var Path = require('path')
-      var dir = Path.dirname(code_file_path)
-      validation_file = Path.resolve(dir, validation)
-      console.log('validation', validation_file)
-      this.vineyard.add_json_schema(validation_file, validation_file)
-    }
+  private create_service(service:common.Service_Definition) {
 
-    if (http_path) {
-      if (http_path[0] != '/')
-        http_path = '/' + http_path
+    //var validation_key:string = null
+    //if (service.validation) {
+    //  if (service.validation.indexOf('.json') > -1) {
+    //    var code_file_path = Error()['stack'].split("\n")[3].match(/\((.+?):\d/)[1]
+    //    var Path = require('path')
+    //    var dir = Path.dirname(code_file_path)
+    //    validation_key = Path.resolve(dir, service.validation)
+    //    console.log('validation', validation_key)
+    //    this.vineyard.load_json_schema(validation_key, validation_key)
+    //  }
+    //  else {
+    //    validation_key = service.validation
+    //  }
+    //}
 
-      this.app.post(http_path, (req, res)=> {
+    if (service.http_path) {
+      if (service.http_path[0] != '/')
+        service.http_path = '/' + service.http_path
+
+      this.app.post(service.http_path, (req, res)=> {
           var user = null
           // Start with a promise so all possible errors (short of one inside when.js) are
           // handled through promise rejections.  Otherwise we would need a try/catch here
@@ -449,9 +463,9 @@ class Lawn extends Vineyard.Bulb {
             .then(()=> this.get_user_from_session(req.sessionID))
             .then((u)=> {
               user = u
-              return this.check_service(req.body, user, authorization, validation_file)
+              return this.check_service(req.body, user, service.authorization, service.validation)
             })
-            .then(()=> action(req.body, user))
+            .then(()=> service.action(req.body, user))
             .done((response)=> {
               res.send(response)
             }, (error)=> {
@@ -974,21 +988,22 @@ class Lawn extends Vineyard.Bulb {
     this.listen_user_http('/vineyard/logout', (req, res, user)=> this.logout(req, res, user))
     this.listen_user_http('/vineyard/logout', (req, res, user)=> this.logout(req, res, user), 'get')
 
-    this.listen_user_http('/vineyard/query', (req, res, user)=> {
-      return Lawn.Irrigation.query(req.body, user, this.ground, this.vineyard)
-        .then((result)=> {
-          if (!result.status)
-            result.status = 200
-
-          result.message = 'Success'
-          res.send(result)
-        })
-    })
-    this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_request(req, res, req.body))
-//    this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_execute(req, res, req.query), 'get')
+    for (var i in this.services) {
+      this.create_service(this.services[i])
+    }
+    //this.listen_user_http('/vineyard/query', (req, res, user)=> {
+    //  return irrigation.query(req.body, user, this.ground, this.vineyard)
+    //    .then((result)=> {
+    //      if (!result.status)
+    //        result.status = 200
+    //
+    //      result.message = 'Success'
+    //      res.send(result)
+    //    })
+    //})
 
     this.listen_user_http('/vineyard/update', (req, res, user)=> {
-      return Lawn.Irrigation.update(req.body, user, this.ground, this.vineyard)
+      return irrigation.update(req.body, user, this.ground, this.vineyard)
         .then((result)=> {
           if (!result.status)
             result.status = 200
@@ -998,6 +1013,7 @@ class Lawn extends Vineyard.Bulb {
         })
     })
 
+    this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_request(req, res, req.body))
     this.listen_user_http('/vineyard/current-user', (req, res, user)=> {
       res.send({
         status: 200,
@@ -1039,9 +1055,6 @@ class Lawn extends Vineyard.Bulb {
           this.invoke('file.uploaded', object)
         })
     })
-
-    var gardener = require('./lib/gardener')
-    gardener.grow(this)
 
 //    this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
     this.listen_user_http('/file/:guid.:ext', (req, res, user)=> this.file_download(req, res, user), 'get')
@@ -1141,247 +1154,6 @@ module Lawn {
     valid_display_name?
     valid_password?
     allow_cors?:boolean
-  }
-
-  export interface Update_Request {
-    objects:any[]
-    version?:number
-  }
-
-  export class Irrigation {
-
-    static prepare_fortress(fortress, user):Promise {
-      if (!fortress)
-        return when.resolve()
-
-      return fortress.get_roles(user)
-    }
-
-    static process(method:string, request:Ground.External_Query_Source, user:Vineyard.IUser, vineyard:Vineyard, socket, callback):Promise {
-      var fortress = vineyard.bulbs.fortress
-      var action = Irrigation[method]
-      return Irrigation.prepare_fortress(fortress, user)
-        .then(()=> action(request, user, vineyard.ground, vineyard))
-        .then((result)=> {
-          result.status = 200
-          result.message = 'Success'
-          if (callback)
-            callback(result)
-          else if (method != 'update')
-            socket.emit('error', {
-              status: 400,
-              message: 'Query requests need to ask for an acknowledgement',
-              request: request
-            })
-        },
-        (error)=> {
-//          if (callback)
-//            callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [],
-//              unauthorized_object: error.resource})
-//          else
-          error = error || {}
-          console.log(method + 'service error:', error.message, error.status, error.stack)
-          console.log(JSON.stringify(request))
-          var status = error.status || 500
-
-          var response = {
-            code: status,
-            status: status,
-            request: request,
-            message: status == 500 ? "Server Error" : error.message,
-            key: error.key || 'unknown'
-          }
-
-          if (fortress.user_has_role(user, 'dev')) {
-            response.message = error.message || "Server Error"
-            response['stack'] = error.stack
-            details: error.details
-          }
-
-          if (vineyard.bulbs.lawn.debug_mode)
-            console.log('error', error.stack)
-
-          if (callback)
-            callback(response)
-          else
-            socket.emit('error', response)
-        })
-    }
-
-    /*
-     static generate_hash(input:string):string {
-     var crypto = require('crypto');
-     var name = 'braitsch';
-     return crypto.createHash('md5').update(name).digest('hex');
-     }
-
-     static query_with_cache(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
-     if (vineyard.bulbs['lawn'].config.cache_queries !== true) {
-     return Irrigation.query(request, user, ground, vineyard)
-     }
-
-     if (!request)
-     throw new HttpError('Empty request', 400)
-
-     var trellis = ground.sanitize_trellis_argument(request.trellis);
-     if (typeof request.key == 'string' && typeof request.expires == 'number' && request.expires > 0) {
-     var hash = Irrigation.generate_hash(JSON.stringify(request))
-     console.log('hash', hash)
-     var sql = "SELECT * FROM query_cache WHERE (expires = 0 || expires > UNIX_TIMESTAMP()) AND hash = ?"
-     return ground.db.query_single(sql, [hash])
-     .then((row)=> {
-     console.log('row', row)
-     if (row) {
-     console.log('using query cache for:', request.name, hash)
-     return JSON.parse(row.data)
-     }
-     else {
-     var query = new Ground.Query_Builder(trellis);
-     query.extend(request)
-     return query.run()
-     .then((result)=> {
-     var sql1 = "REPLACE INTO query_cache (`key`, `hash`, `data`, `timestamp`, `expires`)"
-     + " VALUES (?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP() + ?)"
-
-     var sql2 = "INSERT INTO query_logs (`key`, `hash`, `timestamp`, `user`)"
-     + " VALUES (?, ?, UNIX_TIMESTAMP(), ?)"
-     return ground.db.query(sql1, [request.key, hash, JSON.stringify(result), request.expires * 1000])
-     .then(()=> ground.db.query(sql2, [request.key, hash, user.id]))
-     .then(()=> result)
-     })
-
-     }
-     })
-     }
-     else {
-     var query = new Ground.Query_Builder(trellis);
-     query.extend(request)
-     return query.run()
-     }
-     }
-     */
-    static query(request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promise {
-      var Fortress = require('vineyard-fortress')
-      if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
-        throw new HttpError('The request must have a version property.', 400, 'version-required')
-
-      if (!request)
-        throw new HttpError('Empty request', 400)
-
-      var validator = require('tv4')
-      if (!validator.validate(request, vineyard.ground.query_schema)) {
-        var error = validator.error
-        var message = error.dataPath == ""
-          ? error.message
-          : error.message + " for " + error.dataPath.substring(1)
-        throw new HttpError(message, 400, 'invalid-query')
-      }
-
-      if (!ground.trellises[request.trellis])
-        throw new HttpError('Invalid trellis: ' + request.trellis + '.', 400, 'invalid-trellis')
-
-      var trellis = ground.sanitize_trellis_argument(request.trellis);
-      var query = new Ground.Query_Builder(trellis);
-      query.extend(request)
-
-      var fortress = vineyard.bulbs.fortress
-      if (fortress) {
-        return fortress.query_access(user, query)
-          .then((result)=> {
-            if (result.is_allowed)
-              return Irrigation.run_query(query, user, vineyard, request)
-            else {
-              throw new Authorization_Error(result.get_message())
-            }
-          })
-      }
-      else {
-        return Irrigation.run_query(query, user, vineyard, request)
-      }
-    }
-
-    static run_query(query:Ground.Query_Builder, user:Vineyard.IUser, vineyard:Vineyard, request:Ground.External_Query_Source):Promise {
-      var lawn = vineyard.bulbs['lawn']
-      var query_result:Ground.Query_Result = {query_count: 0}
-      var fortress = vineyard.bulbs.fortress
-      if (request.return_sql === true && (!fortress || fortress.user_has_role(user, 'dev')))
-        query_result.return_sql = true;
-
-      var start = Date.now()
-      return query.run(query_result)
-        .then((result)=> {
-          result.query_stats.duration = Math.abs(Date.now() - start)
-          if (result.sql && !vineyard.ground.log_queries)
-            console.log('\nservice-query:', "\n" + result.sql)
-
-          if (result.total === undefined)
-            result.total = result.objects.length
-
-          if (lawn.config.log_queries === true) {
-            var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count, version)"
-              + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?, ?)"
-
-            // This may cause some problems with the automated tests,
-            // but the response does not wait for this log to be stored.
-            // I'm doing it this way because the whole point of this log is performance timing
-            // and I don't want it to bloat the perceived external request time.
-            query.ground.db.query(sql, [
-              user.id,
-              query.trellis.name,
-              JSON.stringify(request),
-              result.query_stats.duration,
-              result.query_stats.count,
-              result.objects.length,
-              request.version || lawn.config.default_version || "?"
-            ])
-          }
-          return result
-        })
-    }
-
-    static update(request:Update_Request, user, ground:Ground.Core, vineyard:Vineyard):Promise {
-      if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
-        throw new HttpError('The request must have a version property.', 400, 'version-required')
-
-      if (user.id == 2)
-        throw new HttpError('Anonymous cannot create content.', 403);
-
-      if (!MetaHub.is_array(request.objects))
-        throw new HttpError('Update is missing objects list.', 400)
-
-      var updates = request.objects.map((object)=>
-          ground.create_update(object.trellis, object, user)
-      )
-
-      if (!request.objects)
-        throw new HttpError('Request requires an objects array', 400);
-
-      var fortress = vineyard.bulbs.fortress
-      if (fortress) {
-        return fortress.update_access(user, updates)
-          .then((result)=> {
-            if (result.is_allowed) {
-              var update_promises = updates.map((update) => update.run())
-              return when.all(update_promises)
-                .then((objects)=> {
-                  return {
-                    objects: objects
-                  }
-                })
-            }
-            else
-              throw new Authorization_Error('You are not authorized to perform this update')
-          })
-      }
-      else {
-        return when.all(updates.map((update) => update.run()))
-          .then((objects)=> {
-            return {
-              objects: objects
-            }
-          })
-      }
-    }
   }
 
   export class Facebook extends Vineyard.Bulb {

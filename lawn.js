@@ -1,3 +1,7 @@
+///<reference path="defs/socket.io.extension.d.ts"/>
+///<reference path="defs/express.d.ts"/>
+/// <reference path="lib/common.ts"/>
+/// <reference path="lib/irrigation.ts"/>
 var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
@@ -32,6 +36,7 @@ var Lawn = (function (_super) {
 
         if (this.config.log_updates) {
             this.listen(ground, '*.update', function (seed, update) {
+                // Don't want an infinite loop
                 if (update.trellis.name == 'update_log')
                     return when.resolve();
 
@@ -79,6 +84,7 @@ var Lawn = (function (_super) {
         var time = Math.round(new Date().getTime() / 10);
         var text = args.join(', ');
         console.log(text);
+        //      return this.ground.db.query("INSERT INTO debug (source, message, time) VALUES ('server', '" + text + "', " + time + ")");
     };
 
     Lawn.prototype.emit_to_users = function (users, name, data) {
@@ -134,11 +140,15 @@ var Lawn = (function (_super) {
         console.log(process.pid, 'Logged in: ' + user.id);
     };
 
+    // Attach user online status to any queried users
     Lawn.prototype.query_user = function (user, query) {
+        //    console.log('modifying query')
         if (!this.io)
             return;
 
         var clients = this.io.sockets.clients(user.id);
+        //    console.log('modifying query', clients.length)
+        //    user.online = clients.length > 0
     };
 
     Lawn.prototype.start = function () {
@@ -198,6 +208,7 @@ var Lawn = (function (_super) {
         query.add_subquery('user').add_subquery('roles');
 
         return query.run_single().then(function (session) {
+            //console.log('session', session)
             if (!session)
                 throw new HttpError('Session not found.', 401);
 
@@ -381,6 +392,20 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.create_service = function (service) {
+        //var validation_key:string = null
+        //if (service.validation) {
+        //  if (service.validation.indexOf('.json') > -1) {
+        //    var code_file_path = Error()['stack'].split("\n")[3].match(/\((.+?):\d/)[1]
+        //    var Path = require('path')
+        //    var dir = Path.dirname(code_file_path)
+        //    validation_key = Path.resolve(dir, service.validation)
+        //    console.log('validation', validation_key)
+        //    this.vineyard.load_json_schema(validation_key, validation_key)
+        //  }
+        //  else {
+        //    validation_key = service.validation
+        //  }
+        //}
         var _this = this;
         if (service.http_path) {
             if (service.http_path[0] != '/')
@@ -389,6 +414,9 @@ var Lawn = (function (_super) {
             this.app.post(service.http_path, function (req, res) {
                 var user = null;
 
+                // Start with a promise so all possible errors (short of one inside when.js) are
+                // handled through promise rejections.  Otherwise we would need a try/catch here
+                // and redundant error handling.
                 when.resolve().then(function () {
                     return _this.get_user_from_session(req.sessionID);
                 }).then(function (u) {
@@ -481,6 +509,7 @@ var Lawn = (function (_super) {
                 if (rows.length > 0)
                     return when.reject(new HttpError('That ' + rows[0].value + ' is already taken.', 400));
 
+                // Not so worried about invalid gender, just filter it
                 var gender = body.gender;
                 if (gender !== 'male' && gender !== 'female')
                     gender = null;
@@ -527,6 +556,13 @@ var Lawn = (function (_super) {
         var _this = this;
         var body = req.body;
         if (body.facebook_token === null || body.facebook_token === '') {
+            //      if (!user.facebook_id) {
+            //        res.send({
+            //          message: "Your account is already not linked to a facebook account.",
+            //          user: user
+            //        });
+            //        return when.resolve()
+            //      }
             console.log('connect-fb-user-detach', user);
             delete user.facebook_id;
             return this.ground.db.query_single("UPDATE users SET facebook_id = NULL WHERE id = ?", [user.id]).then(function () {
@@ -549,6 +585,10 @@ var Lawn = (function (_super) {
                 args.push(facebook_id);
             }
 
+            //        return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
+            //          .then((row)=> {
+            //            if (row)
+            //              return when.reject(new HttpError('That facebook id is already attached to a user.', 400))
             console.log('connect-fb-user', {
                 id: user.id,
                 facebook_id: facebook_id
@@ -562,6 +602,7 @@ var Lawn = (function (_super) {
                     user: user
                 });
             });
+            //          })
         });
     };
 
@@ -571,6 +612,8 @@ var Lawn = (function (_super) {
         var def = when.defer();
         var http = require(secure ? 'https' : 'http');
 
+        //    if (secure)
+        //      options.secureProtocol = 'SSLv3_method'
         var req = http.request(options, function (res) {
             res.setEncoding('utf8');
             if (res.statusCode != '200') {
@@ -650,6 +693,8 @@ var Lawn = (function (_super) {
                 data = user;
                 if (_this.ground.db.active)
                     return _this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id);
+                //        data.online = false;
+                //        return Server.notify.send_online_changed(user, false);
             }
 
             return when.resolve();
@@ -751,6 +796,7 @@ var Lawn = (function (_super) {
         var _this = this;
         if (typeof method === "undefined") { method = 'post'; }
         this.app[method](path, function (req, res) {
+            //        console.log('server recieved query request.')
             _this.process_user_http(req, res, action);
         });
     };
@@ -771,6 +817,7 @@ var Lawn = (function (_super) {
             }
         });
 
+        // Authorization
         io.configure(function () {
             return io.set('authorization', Lawn.authorization);
         });
@@ -803,6 +850,7 @@ var Lawn = (function (_super) {
             if (!exists)
                 throw new HttpError('File Not Found', 404);
 
+            //          throw new Error('File Not Found')
             var query = _this.ground.create_query('file');
             query.add_key_filter(req.params.guid);
             var fortress = _this.vineyard.bulbs.fortress;
@@ -832,6 +880,7 @@ var Lawn = (function (_super) {
         var express = require('express');
         var app = this.app = express();
 
+        //app.use(require('body-parser')({keepExtensions: true, uploadDir: "tmp"}));
         var parser = require('body-parser');
         app.use(parser.json());
         app.use(require('cookie-parser')());
@@ -865,12 +914,14 @@ var Lawn = (function (_super) {
             console.log('Using CORS');
         }
 
+        // Log request info to a file
         if (typeof this.config.log_file === 'string') {
             var fs = require('fs');
             var log_file = fs.createWriteStream(this.config.log_file, { flags: 'a' });
             app.use(express.logger({ stream: log_file }));
         }
 
+        // Hook login and logout for both GET and POST
         this.listen_public_http('/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.body);
         });
@@ -888,6 +939,16 @@ var Lawn = (function (_super) {
             this.create_service(this.services[i]);
         }
 
+        //this.listen_user_http('/vineyard/query', (req, res, user)=> {
+        //  return irrigation.query(req.body, user, this.ground, this.vineyard)
+        //    .then((result)=> {
+        //      if (!result.status)
+        //        result.status = 200
+        //
+        //      result.message = 'Success'
+        //      res.send(result)
+        //    })
+        //})
         this.listen_user_http('/vineyard/update', function (req, res, user) {
             return irrigation.update(req.body, user, _this.ground, _this.vineyard).then(function (result) {
                 if (!result.status)
@@ -928,6 +989,7 @@ var Lawn = (function (_super) {
             var fs = require('fs');
             fs.rename(file.path, filepath);
 
+            // !!! Add check if file already exists
             return _this.ground.update_object('file', {
                 guid: guid,
                 name: filename,
@@ -941,6 +1003,7 @@ var Lawn = (function (_super) {
             });
         });
 
+        //    this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
         this.listen_user_http('/file/:guid.:ext', function (req, res, user) {
             return _this.file_download(req, res, user);
         }, 'get');
@@ -973,6 +1036,7 @@ var Lawn = (function (_super) {
     Lawn.prototype.stop = function () {
         console.log('Stopping Lawn');
 
+        // Socket IO's documentation is a joke.  I had to look on stack overflow for how to close a socket server.
         if (this.io && this.io.server) {
             console.log('Stopping Socket.IO');
             var clients = this.io.sockets.clients();
@@ -1068,6 +1132,19 @@ var Lawn;
                         return user;
 
                     throw new Lawn.HttpError('That Facebook user id is not yet connected to an account.  Redirect to registration.', 300);
+                    //              return when.reject({ status: 300, message: 'That Facebook user id is not yet connected to an account.  Redirect to registration.' })
+                    //              var options = {
+                    //                host: 'graph.facebook.com',
+                    //                path: '/' + facebook_id + '?fields=name,username,gender,picture'
+                    //                  + '&access_token=' + body.facebook_token,
+                    //                method: 'GET'
+                    //              }
+                    //
+                    //              return Lawn.request(options, null, true)
+                    //                .then((response) => {
+                    //                  console.log('fb-user', response.content)
+                    //                  return this.create_user(facebook_id, response.content)
+                    //                })
                 });
             });
         };
@@ -1251,6 +1328,7 @@ var Lawn;
             this.transporter = nodemailer.createTransport(ses_transport(config));
         }
         Mail.prototype.send = function (to, subject, text) {
+            //    console.log('Sending email to ', to)
             var def = when.defer();
             console.log(this.config.address);
             this.transporter.sendMail({

@@ -22,7 +22,7 @@ module.exports = function (grunt) {
         options: {                    // use to override the default options, http://gruntjs.com/configuring-tasks#options
           target: 'es5',            // 'es3' (default) | 'es5'
           module: 'commonjs',       // 'amd' (default) | 'commonjs'
-          declaration: false,       // true | false  (default)
+          declaration: true,       // true | false  (default)
           verbose: true
         }
       }
@@ -45,7 +45,7 @@ module.exports = function (grunt) {
         tasks: ['ts:lawn', 'replace']
       },
       lib: {
-        files: ['lib/*.ts'],
+        files: ['lib/gardener.ts', 'lib/common.ts', 'lib/irrigation.ts'],
         tasks: ['ts:lib']
       }
     }

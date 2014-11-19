@@ -1,6 +1,7 @@
 /// <reference path="common.ts"/>
 import common = require('./common')
 import Ground = require('vineyard-ground')
+import MetaHub = require('vineyard-metahub')
 var HttpError = common.HttpError
 
 function prepare_fortress(fortress, user):Promise {
@@ -192,5 +193,4 @@ export function grow(lawn) {
   //       res.send(result)
   //     })
   // })
-
 }

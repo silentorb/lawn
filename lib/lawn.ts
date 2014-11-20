@@ -524,7 +524,7 @@ class Lawn extends Vineyard.Bulb {
       return when.reject(new HttpError('Invalid email address.', 400))
 
     if (typeof password != 'string' || password.length > 32 || !password.match(this.config.valid_password))
-      return when.reject(new HttpError('Invalid username.', 400))
+      return when.reject(new HttpError('Invalid password.', 400))
 
     if (typeof display_name != 'string')
       display_name = null

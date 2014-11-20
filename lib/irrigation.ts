@@ -146,40 +146,70 @@ export function update(request:common.Update_Request, user, ground:Ground.Core, 
     throw new HttpError('Request requires an objects array', 400);
 
   var fortress = vineyard.bulbs.fortress
-  if (fortress) {
-    return fortress.update_access(user, updates)
-      .then((result)=> {
-        if (result.is_allowed) {
-          var update_promises = updates.map((update) => update.run())
-          return when.all(update_promises)
-            .then((objects)=> {
-              return {
-                objects: objects
-              }
-            })
-        }
-        else
-          throw new common.Authorization_Error('You are not authorized to perform this update')
-      })
-  }
-  else {
-    return when.all(updates.map((update) => update.run()))
-      .then((objects)=> {
-        return {
-          objects: objects
-        }
-      })
-  }
+  return fortress.update_access(user, updates)
+    .then((result)=> {
+      if (result.is_allowed) {
+        var update_promises = updates.map((update) => update.run())
+        return when.all(update_promises)
+          .then((objects)=> {
+            return {
+              objects: objects
+            }
+          })
+      }
+      else
+        throw new common.Authorization_Error('You are not authorized to perform this update')
+    })
+}
+
+
+export function update2(request:common.Update_Request, user, lawn):Promise {
+  var ground:Ground.Core = lawn.ground, vineyard:Vineyard = lawn.vineyard
+  if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
+    throw new HttpError('The request must have a version property.', 400, 'version-required')
+
+  if (user.id == 2)
+    throw new HttpError('Anonymous cannot create content.', 403);
+
+  var updates = request.objects.map((object)=>
+      ground.create_update(object.trellis, object, user)
+  )
+
+  var fortress = vineyard.bulbs.fortress
+  return fortress.update_access(user, updates)
+    .then((result)=> {
+      if (result.is_allowed) {
+        var update_promises = updates.map((update) => update.run())
+        return when.all(update_promises)
+          .then((objects)=> {
+            return {
+              objects: objects
+            }
+          })
+      }
+      else {
+        throw new common.Authorization_Error(result.get_message())
+      }
+    })
 }
 
 export function grow(lawn) {
   lawn.vineyard.add_json_schema('ground-query', lawn.ground.query_schema)
+  lawn.vineyard.add_json_schema('ground-update', lawn.ground.update_schema)
   lawn.add_service({
     http_path: 'vineyard/query',
     //socket_path: 'gardener/config',
     authorization: common.is_authenticated,
     validation: 'ground-query',
     action: (data, user)=> query(data, user, lawn)
+  })
+
+  lawn.add_service({
+    http_path: 'vineyard/update',
+    //socket_path: 'gardener/config',
+    authorization: common.is_authenticated,
+    validation: 'ground-update',
+    action: (data, user)=> update2(data, user, lawn)
   })
 
   //request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promis

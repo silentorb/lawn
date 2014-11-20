@@ -1002,16 +1002,16 @@ class Lawn extends Vineyard.Bulb {
     //    })
     //})
 
-    this.listen_user_http('/vineyard/update', (req, res, user)=> {
-      return irrigation.update(req.body, user, this.ground, this.vineyard)
-        .then((result)=> {
-          if (!result.status)
-            result.status = 200
-
-          result.message = 'Success'
-          res.send(result)
-        })
-    })
+    //this.listen_user_http('/vineyard/update', (req, res, user)=> {
+    //  return irrigation.update(req.body, user, this.ground, this.vineyard)
+    //    .then((result)=> {
+    //      if (!result.status)
+    //        result.status = 200
+    //
+    //      result.message = 'Success'
+    //      res.send(result)
+    //    })
+    //})
 
     this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_request(req, res, req.body))
     this.listen_user_http('/vineyard/current-user', (req, res, user)=> {

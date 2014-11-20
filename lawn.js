@@ -1,18 +1,309 @@
+/**
+* User: Chris Johnson
+* Date: 11/15/2014
+*/
+/// <reference path="references.ts"/>
 var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
     d.prototype = new __();
 };
-var when = require('when');
-var MetaHub = require('vineyard-metahub');
-var Ground = require('vineyard-ground');
-var Vineyard = require('vineyard');
-var common = require('./lib/common');
-var irrigation = require('./lib/irrigation');
+var when = require('when')
+var MetaHub = require('vineyard-metahub')
+var Ground = require('vineyard-ground')
+var Vineyard = require('vineyard')
+var HttpError = (function () {
+    function HttpError(message, status, key) {
+        if (typeof status === "undefined") { status = 500; }
+        if (typeof key === "undefined") { key = undefined; }
+        this.name = "HttpError";
+        this.message = message;
+        this.status = status;
+        this.key = key;
+    }
+    return HttpError;
+})();
 
-var HttpError = common.HttpError;
-var Authorization_Error = common.Authorization_Error;
+var Authorization_Error = (function (_super) {
+    __extends(Authorization_Error, _super);
+    function Authorization_Error(message) {
+        _super.call(this, message, 403);
+    }
+    return Authorization_Error;
+})(HttpError);
+
+function is_authenticated(user, fortress) {
+    return user && typeof user.id == 'number' && user.username != 'anonymous';
+}
+
+function is_admin(user, fortress) {
+    return fortress.user_has_role(user, 'admin');
+}
+/**
+* User: Chris Johnson
+* Date: 11/15/2014
+*/
+/// <reference path="references.ts"/>
+var Gardener = (function () {
+    function Gardener() {
+    }
+    Gardener.set_config = function (data, lawn) {
+        if (data.socket) {
+            if (typeof data.socket.log == 'boolean') {
+                lawn.io.set('log level', data.socket.log ? 3 : 0);
+                console.log("Gardener turned socket logging " + (data.socket.log ? 'on' : 'off'));
+            }
+        }
+        return when.resolve({
+            message: 'Done',
+            key: 'success'
+        });
+    };
+
+    Gardener.grow = function (lawn) {
+        var Path = require('path');
+        lawn.vineyard.load_json_schema('gardener-config', Path.resolve(__dirname, './validation/gardener-config.json'));
+        lawn.add_service({
+            http_path: 'vineyard/gardener/config',
+            socket_path: 'gardener/config',
+            authorization: is_admin,
+            validation: 'gardener-config',
+            action: function (data) {
+                return function (data) {
+                    return Gardener.set_config(data, lawn);
+                };
+            }
+        });
+        //lawn.create_user_service('vineyard/gardener/config', 'gardener/config',
+        //  is_admin, '../validation/gardener-config.json', (data)=> set_config(data, lawn))
+    };
+    return Gardener;
+})();
+/// <reference path="references.ts"/>
+var Irrigation = (function () {
+    function Irrigation() {
+    }
+    Irrigation.prepare_fortress = function (fortress, user) {
+        if (!fortress)
+            return when.resolve();
+
+        return fortress.get_roles(user);
+    };
+
+    Irrigation.process = function (method, request, user, vineyard, socket, callback) {
+        var fortress = vineyard.bulbs.fortress;
+        var action = method == 'query' ? Irrigation.query : Irrigation.update;
+        return Irrigation.prepare_fortress(fortress, user).then(function () {
+            return action(request, user, vineyard.ground, vineyard);
+        }).then(function (result) {
+            result.status = 200;
+            result.message = 'Success';
+            if (callback)
+                callback(result);
+            else if (method != 'update')
+                socket.emit('error', {
+                    status: 400,
+                    message: 'Query requests need to ask for an acknowledgement',
+                    request: request
+                });
+        }, function (error) {
+            //          if (callback)
+            //            callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [],
+            //              unauthorized_object: error.resource})
+            //          else
+            error = error || {};
+            console.log(method + 'service error:', error.message, error.status, error.stack);
+            console.log(JSON.stringify(request));
+            var status = error.status || 500;
+
+            var response = {
+                code: status,
+                status: status,
+                request: request,
+                message: status == 500 ? "Server Error" : error.message,
+                key: error.key || 'unknown'
+            };
+
+            if (fortress.user_has_role(user, 'dev')) {
+                response.message = error.message || "Server Error";
+                response['stack'] = error.stack;
+                details:
+                error.details;
+            }
+
+            if (vineyard.bulbs.lawn.debug_mode)
+                console.log('error', error.stack);
+
+            if (callback)
+                callback(response);
+            else
+                socket.emit('error', response);
+        });
+    };
+
+    Irrigation.query = function (request, user, lawn) {
+        var ground = lawn.ground, vineyard = lawn.vineyard;
+        var Fortress = require('vineyard-fortress');
+        if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
+            throw new HttpError('The request must have a version property.', 400, 'version-required');
+
+        if (!request)
+            throw new HttpError('Empty request', 400);
+
+        if (!ground.trellises[request.trellis])
+            throw new HttpError('Invalid trellis: ' + request.trellis + '.', 400, 'invalid-trellis');
+
+        var trellis = ground.sanitize_trellis_argument(request.trellis);
+        var query = new Ground.Query_Builder(trellis);
+        query.extend(request);
+
+        var fortress = vineyard.bulbs.fortress;
+        return fortress.query_access(user, query).then(function (result) {
+            if (result.is_allowed)
+                return Irrigation.run_query(query, user, vineyard, request);
+            else {
+                throw new Authorization_Error(result.get_message());
+            }
+        });
+    };
+
+    Irrigation.run_query = function (query, user, vineyard, request) {
+        var lawn = vineyard.bulbs['lawn'];
+        var query_result = { query_count: 0 };
+        var fortress = vineyard.bulbs.fortress;
+        if (request.return_sql === true && (!fortress || fortress.user_has_role(user, 'dev')))
+            query_result.return_sql = true;
+
+        var start = Date.now();
+        return query.run(query_result).then(function (result) {
+            result.query_stats.duration = Math.abs(Date.now() - start);
+            if (result.sql && !vineyard.ground.log_queries)
+                console.log('\nservice-query:', "\n" + result.sql);
+
+            if (result.total === undefined)
+                result.total = result.objects.length;
+
+            if (lawn.config.log_queries === true) {
+                var sql = "INSERT INTO query_log (user, trellis, timestamp, request, duration, query_count, object_count, version)" + " VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?, ?, ?)";
+
+                // This may cause some problems with the automated tests,
+                // but the response does not wait for this log to be stored.
+                // I'm doing it this way because the whole point of this log is performance timing
+                // and I don't want it to bloat the perceived external request time.
+                query.ground.db.query(sql, [
+                    user.id,
+                    query.trellis.name,
+                    JSON.stringify(request),
+                    result.query_stats.duration,
+                    result.query_stats.count,
+                    result.objects.length,
+                    request.version || lawn.config.default_version || "?"
+                ]);
+            }
+            return result;
+        });
+    };
+
+    Irrigation.update = function (request, user, ground, vineyard) {
+        if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
+            throw new HttpError('The request must have a version property.', 400, 'version-required');
+
+        if (user.id == 2)
+            throw new HttpError('Anonymous cannot create content.', 403);
+
+        if (!MetaHub.is_array(request.objects))
+            throw new HttpError('Update is missing objects list.', 400);
+
+        var updates = request.objects.map(function (object) {
+            return ground.create_update(object.trellis, object, user);
+        });
+
+        if (!request.objects)
+            throw new HttpError('Request requires an objects array', 400);
+
+        var fortress = vineyard.bulbs.fortress;
+        return fortress.update_access(user, updates).then(function (result) {
+            if (result.is_allowed) {
+                var update_promises = updates.map(function (update) {
+                    return update.run();
+                });
+                return when.all(update_promises).then(function (objects) {
+                    return {
+                        objects: objects
+                    };
+                });
+            } else
+                throw new Authorization_Error('You are not authorized to perform this update');
+        });
+    };
+
+    Irrigation.update2 = function (request, user, lawn) {
+        var ground = lawn.ground, vineyard = lawn.vineyard;
+        if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
+            throw new HttpError('The request must have a version property.', 400, 'version-required');
+
+        if (user.id == 2)
+            throw new HttpError('Anonymous cannot create content.', 403);
+
+        var updates = request.objects.map(function (object) {
+            return ground.create_update(object.trellis, object, user);
+        });
+
+        var fortress = vineyard.bulbs.fortress;
+        return fortress.update_access(user, updates).then(function (result) {
+            if (result.is_allowed) {
+                var update_promises = updates.map(function (update) {
+                    return update.run();
+                });
+                return when.all(update_promises).then(function (objects) {
+                    return {
+                        objects: objects
+                    };
+                });
+            } else {
+                throw new Authorization_Error(result.get_message());
+            }
+        });
+    };
+
+    Irrigation.grow = function (lawn) {
+        lawn.vineyard.add_json_schema('ground-query', lawn.ground.query_schema);
+        lawn.vineyard.add_json_schema('ground-update', lawn.ground.update_schema);
+        lawn.add_service({
+            http_path: 'vineyard/query',
+            //socket_path: 'gardener/config',
+            authorization: is_authenticated,
+            validation: 'ground-query',
+            action: function (data, user) {
+                return Irrigation.query(data, user, lawn);
+            }
+        });
+
+        lawn.add_service({
+            http_path: 'vineyard/update',
+            //socket_path: 'gardener/config',
+            authorization: is_authenticated,
+            validation: 'ground-update',
+            action: function (data, user) {
+                return Irrigation.update2(data, user, lawn);
+            }
+        });
+        //request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promis
+        // lawn.listen_user_http('/vineyard/update', (req, res, user)=> {
+        //   return update(req.body, user, lawn.ground, lawn.vineyard)
+        //     .then((result)=> {
+        //       if (!result.status)
+        //         result.status = 200
+        //
+        //       result.message = 'Success'
+        //       res.send(result)
+        //     })
+        // })
+    };
+    return Irrigation;
+})();
+/// <reference path="references.ts"/>
 
 var Lawn = (function (_super) {
     __extends(Lawn, _super);
@@ -32,6 +323,7 @@ var Lawn = (function (_super) {
 
         if (this.config.log_updates) {
             this.listen(ground, '*.update', function (seed, update) {
+                // Don't want an infinite loop
                 if (update.trellis.name == 'update_log')
                     return when.resolve();
 
@@ -59,12 +351,11 @@ var Lawn = (function (_super) {
 
         this.config['valid_password'] = typeof this.config.valid_password == 'string' ? new RegExp(this.config.valid_password) : /^[A-Za-z\- _0-9!@#\$%\^&\*\(\)?]+$/;
 
-        this.config['valid_display_name'] = typeof this.config.valid_display_name == 'string' ? new RegExp(this.config.valid_display_name) : /^[A-Za-z\- _0-9!@#\$%\^&\*\(\)?]+$/;
+        this.config['valid_display_name'] = typeof this.config.valid_display_name == 'string' ? new RegExp(this.config.valid_display_name) : /^[A-Za-z\-_0-9]+$/;
 
-        irrigation.grow(this);
+        Irrigation.grow(this);
 
-        var gardener = require('./lib/gardener');
-        gardener.grow(this);
+        Gardener.grow(this);
     };
 
     Lawn.authorization = function (handshakeData, callback) {
@@ -79,6 +370,7 @@ var Lawn = (function (_super) {
         var time = Math.round(new Date().getTime() / 10);
         var text = args.join(', ');
         console.log(text);
+        //      return this.ground.db.query("INSERT INTO debug (source, message, time) VALUES ('server', '" + text + "', " + time + ")");
     };
 
     Lawn.prototype.emit_to_users = function (users, name, data) {
@@ -106,11 +398,11 @@ var Lawn = (function (_super) {
         socket.join('user/' + user.id);
 
         socket.on('query', function (request, callback) {
-            return irrigation.process('query', request, user, _this.vineyard, socket, callback);
+            return Irrigation.process('query', request, user, _this.vineyard, socket, callback);
         });
 
         socket.on('update', function (request, callback) {
-            return irrigation.process('update', request, user, _this.vineyard, socket, callback);
+            return Irrigation.process('update', request, user, _this.vineyard, socket, callback);
         });
 
         this.on_socket(socket, 'room/join', user, function (request) {
@@ -134,11 +426,15 @@ var Lawn = (function (_super) {
         console.log(process.pid, 'Logged in: ' + user.id);
     };
 
+    // Attach user online status to any queried users
     Lawn.prototype.query_user = function (user, query) {
+        //    console.log('modifying query')
         if (!this.io)
             return;
 
         var clients = this.io.sockets.clients(user.id);
+        //    console.log('modifying query', clients.length)
+        //    user.online = clients.length > 0
     };
 
     Lawn.prototype.start = function () {
@@ -198,6 +494,7 @@ var Lawn = (function (_super) {
         query.add_subquery('user').add_subquery('roles');
 
         return query.run_single().then(function (session) {
+            //console.log('session', session)
             if (!session)
                 throw new HttpError('Session not found.', 401);
 
@@ -381,6 +678,20 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.create_service = function (service) {
+        //var validation_key:string = null
+        //if (service.validation) {
+        //  if (service.validation.indexOf('.json') > -1) {
+        //    var code_file_path = Error()['stack'].split("\n")[3].match(/\((.+?):\d/)[1]
+        //    var Path = require('path')
+        //    var dir = Path.dirname(code_file_path)
+        //    validation_key = Path.resolve(dir, service.validation)
+        //    console.log('validation', validation_key)
+        //    this.vineyard.load_json_schema(validation_key, validation_key)
+        //  }
+        //  else {
+        //    validation_key = service.validation
+        //  }
+        //}
         var _this = this;
         if (service.http_path) {
             if (service.http_path[0] != '/')
@@ -389,6 +700,9 @@ var Lawn = (function (_super) {
             this.app.post(service.http_path, function (req, res) {
                 var user = null;
 
+                // Start with a promise so all possible errors (short of one inside when.js) are
+                // handled through promise rejections.  Otherwise we would need a try/catch here
+                // and redundant error handling.
                 when.resolve().then(function () {
                     return _this.get_user_from_session(req.sessionID);
                 }).then(function (u) {
@@ -481,6 +795,7 @@ var Lawn = (function (_super) {
                 if (rows.length > 0)
                     return when.reject(new HttpError('That ' + rows[0].value + ' is already taken.', 400));
 
+                // Not so worried about invalid gender, just filter it
                 var gender = body.gender;
                 if (gender !== 'male' && gender !== 'female')
                     gender = null;
@@ -527,6 +842,13 @@ var Lawn = (function (_super) {
         var _this = this;
         var body = req.body;
         if (body.facebook_token === null || body.facebook_token === '') {
+            //      if (!user.facebook_id) {
+            //        res.send({
+            //          message: "Your account is already not linked to a facebook account.",
+            //          user: user
+            //        });
+            //        return when.resolve()
+            //      }
             console.log('connect-fb-user-detach', user);
             delete user.facebook_id;
             return this.ground.db.query_single("UPDATE users SET facebook_id = NULL WHERE id = ?", [user.id]).then(function () {
@@ -549,6 +871,10 @@ var Lawn = (function (_super) {
                 args.push(facebook_id);
             }
 
+            //        return this.ground.db.query_single("SELECT id, name FROM users WHERE facebook_id = ?", [facebook_id])
+            //          .then((row)=> {
+            //            if (row)
+            //              return when.reject(new HttpError('That facebook id is already attached to a user.', 400))
             console.log('connect-fb-user', {
                 id: user.id,
                 facebook_id: facebook_id
@@ -562,6 +888,7 @@ var Lawn = (function (_super) {
                     user: user
                 });
             });
+            //          })
         });
     };
 
@@ -571,6 +898,8 @@ var Lawn = (function (_super) {
         var def = when.defer();
         var http = require(secure ? 'https' : 'http');
 
+        //    if (secure)
+        //      options.secureProtocol = 'SSLv3_method'
         var req = http.request(options, function (res) {
             res.setEncoding('utf8');
             if (res.statusCode != '200') {
@@ -650,6 +979,8 @@ var Lawn = (function (_super) {
                 data = user;
                 if (_this.ground.db.active)
                     return _this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id);
+                //        data.online = false;
+                //        return Server.notify.send_online_changed(user, false);
             }
 
             return when.resolve();
@@ -748,16 +1079,17 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.listen_user_http = function (path, action, method) {
-        if (typeof method === "undefined") { method = 'post'; }
         var _this = this;
+        if (typeof method === "undefined") { method = 'post'; }
         this.app[method](path, function (req, res) {
+            //        console.log('server recieved query request.')
             _this.process_user_http(req, res, action);
         });
     };
 
     Lawn.prototype.start_sockets = function (port) {
-        if (typeof port === "undefined") { port = null; }
         var _this = this;
+        if (typeof port === "undefined") { port = null; }
         var socket_io = require('socket.io');
         port = port || this.config.ports.websocket;
         console.log('Starting Socket.IO on port ' + port);
@@ -771,6 +1103,7 @@ var Lawn = (function (_super) {
             }
         });
 
+        // Authorization
         io.configure(function () {
             return io.set('authorization', Lawn.authorization);
         });
@@ -803,6 +1136,7 @@ var Lawn = (function (_super) {
             if (!exists)
                 throw new HttpError('File Not Found', 404);
 
+            //          throw new Error('File Not Found')
             var query = _this.ground.create_query('file');
             query.add_key_filter(req.params.guid);
             var fortress = _this.vineyard.bulbs.fortress;
@@ -832,6 +1166,7 @@ var Lawn = (function (_super) {
         var express = require('express');
         var app = this.app = express();
 
+        //app.use(require('body-parser')({keepExtensions: true, uploadDir: "tmp"}));
         var parser = require('body-parser');
         app.use(parser.json());
         app.use(require('cookie-parser')());
@@ -865,12 +1200,14 @@ var Lawn = (function (_super) {
             console.log('Using CORS');
         }
 
+        // Log request info to a file
         if (typeof this.config.log_file === 'string') {
             var fs = require('fs');
             var log_file = fs.createWriteStream(this.config.log_file, { flags: 'a' });
             app.use(express.logger({ stream: log_file }));
         }
 
+        // Hook login and logout for both GET and POST
         this.listen_public_http('/vineyard/login', function (req, res) {
             return _this.http_login(req, res, req.body);
         });
@@ -888,6 +1225,26 @@ var Lawn = (function (_super) {
             this.create_service(this.services[i]);
         }
 
+        //this.listen_user_http('/vineyard/query', (req, res, user)=> {
+        //  return irrigation.query(req.body, user, this.ground, this.vineyard)
+        //    .then((result)=> {
+        //      if (!result.status)
+        //        result.status = 200
+        //
+        //      result.message = 'Success'
+        //      res.send(result)
+        //    })
+        //})
+        //this.listen_user_http('/vineyard/update', (req, res, user)=> {
+        //  return irrigation.update(req.body, user, this.ground, this.vineyard)
+        //    .then((result)=> {
+        //      if (!result.status)
+        //        result.status = 200
+        //
+        //      result.message = 'Success'
+        //      res.send(result)
+        //    })
+        //})
         this.listen_public_http('/vineyard/password-reset', function (req, res) {
             return _this.password_reset_request(req, res, req.body);
         });
@@ -918,6 +1275,7 @@ var Lawn = (function (_super) {
             var fs = require('fs');
             fs.rename(file.path, filepath);
 
+            // !!! Add check if file already exists
             return _this.ground.update_object('file', {
                 guid: guid,
                 name: filename,
@@ -931,6 +1289,7 @@ var Lawn = (function (_super) {
             });
         });
 
+        //    this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
         this.listen_user_http('/file/:guid.:ext', function (req, res, user) {
             return _this.file_download(req, res, user);
         }, 'get');
@@ -963,6 +1322,7 @@ var Lawn = (function (_super) {
     Lawn.prototype.stop = function () {
         console.log('Stopping Lawn');
 
+        // Socket IO's documentation is a joke.  I had to look on stack overflow for how to close a socket server.
         if (this.io && this.io.server) {
             console.log('Stopping Socket.IO');
             var clients = this.io.sockets.clients();
@@ -1002,8 +1362,6 @@ var Lawn = (function (_super) {
 
 var Lawn;
 (function (Lawn) {
-    Lawn.HttpError;
-
     var Facebook = (function (_super) {
         __extends(Facebook, _super);
         function Facebook() {
@@ -1058,6 +1416,19 @@ var Lawn;
                         return user;
 
                     throw new Lawn.HttpError('That Facebook user id is not yet connected to an account.  Redirect to registration.', 300);
+                    //              return when.reject({ status: 300, message: 'That Facebook user id is not yet connected to an account.  Redirect to registration.' })
+                    //              var options = {
+                    //                host: 'graph.facebook.com',
+                    //                path: '/' + facebook_id + '?fields=name,username,gender,picture'
+                    //                  + '&access_token=' + body.facebook_token,
+                    //                method: 'GET'
+                    //              }
+                    //
+                    //              return Lawn.request(options, null, true)
+                    //                .then((response) => {
+                    //                  console.log('fb-user', response.content)
+                    //                  return this.create_user(facebook_id, response.content)
+                    //                })
                 });
             });
         };
@@ -1138,8 +1509,8 @@ var Lawn;
         };
 
         Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
-            if (typeof store === "undefined") { store = true; }
             var _this = this;
+            if (typeof store === "undefined") { store = true; }
             var ground = this.lawn.ground;
             var users = users.map(function (x) {
                 return typeof x == 'object' ? x.id : x;
@@ -1241,6 +1612,7 @@ var Lawn;
             this.transporter = nodemailer.createTransport(ses_transport(config));
         }
         Mail.prototype.send = function (to, subject, text) {
+            //    console.log('Sending email to ', to)
             var def = when.defer();
             console.log(this.config.address);
             this.transporter.sendMail({
@@ -1263,8 +1635,27 @@ var Lawn;
         return Mail;
     })();
     Lawn.Mail = Mail;
-})(Lawn || (Lawn = {}));
-Lawn.HttpError = common.HttpError;
 
-module.exports = Lawn;
+    Lawn.HttpError;
+})(Lawn || (Lawn = {}));
+Lawn.HttpError = HttpError;
+/**
+* User: Chris Johnson
+* Date: 11/9/2014
+*/
+/// <reference path="../../vineyard/vineyard.d.ts"/>
+///<reference path="../defs/socket.io.extension.d.ts"/>
+///<reference path="../defs/express.d.ts"/>
+/// <reference path="common.ts"/>
+/// <reference path="gardener.ts"/>
+/// <reference path="irrigation.ts"/>
+/// <reference path="lawn.ts"/>
+/**
+* User: Chris Johnson
+* Date: 11/9/2014
+*/
+/// <reference path="references.ts"/>
+module.exports = Lawn
+function typescript_bulb_export_hack() {
+}
 //# sourceMappingURL=lawn.js.map

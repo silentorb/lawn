@@ -7,46 +7,34 @@ module.exports = function (grunt) {
   grunt.initConfig({
     ts: {
       lawn: {                                 // a particular target
-        src: ["lawn.ts"],        // The source typescript files, http://gruntjs.com/configuring-tasks#files
-//        out: 'lawn.js',                // If specified, generate an out.js file which is the merged js file
+        src: ["lib/export.ts"],        // The source typescript files, http://gruntjs.com/configuring-tasks#files
+        out: 'lawn.js',                // If specified, generate an out.js file which is the merged js file
         options: {                    // use to override the default options, http://gruntjs.com/configuring-tasks#options
           target: 'es5',            // 'es3' (default) | 'es5'
           module: 'commonjs',       // 'amd' (default) | 'commonjs'
+          sourcemap: true,          // true  (default) | false
           declaration: true,       // true | false  (default)
           verbose: true,
           removeComments: false
         }
-      },
-      lib: {                                 // a particular target
-        src: ["lib/*.ts"],        // The source typescript files, http://gruntjs.com/configuring-tasks#files
-        options: {                    // use to override the default options, http://gruntjs.com/configuring-tasks#options
-          target: 'es5',            // 'es3' (default) | 'es5'
-          module: 'commonjs',       // 'amd' (default) | 'commonjs'
-          declaration: true,       // true | false  (default)
-          verbose: true
-        }
       }
     },
     replace: {
-      "ambient module declaration": {
-        src: ["lawn.d.ts"],
+      "export": {
+        src: 'lawn.js',
         overwrite: true,
         replacements: [
           {
-            from: 'export = Lawn;',
-            to: 'declare module "vineyard-lawn" { export = Lawn }'
+            from: '///***',
+            to: ""
           }
         ]
       }
     },
     watch: {
-      lawn: {
-        files: ['lawn.ts'],
-        tasks: ['ts:lawn', 'replace']
-      },
       lib: {
-        files: ['lib/gardener.ts', 'lib/common.ts', 'lib/irrigation.ts'],
-        tasks: ['ts:lib']
+        files: 'lib/**/*.ts',
+        tasks: ['default']
       }
     }
   })

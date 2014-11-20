@@ -1,17 +1,5 @@
-///<reference path="defs/socket.io.extension.d.ts"/>
-///<reference path="defs/express.d.ts"/>
-/// <reference path="lib/common.ts"/>
-/// <reference path="lib/irrigation.ts"/>
+/// <reference path="references.ts"/>
 
-var when = require('when')
-import MetaHub = require('vineyard-metahub')
-import Ground = require('vineyard-ground')
-import Vineyard = require('vineyard')
-import common = require('./lib/common')
-import irrigation = require('./lib/irrigation')
-
-var HttpError = common.HttpError
-var Authorization_Error = common.Authorization_Error
 
 interface User_Source {
   name?:string
@@ -38,7 +26,7 @@ class Lawn extends Vineyard.Bulb {
   mail:Lawn.Mail = null
   password_reset_template:string = null
 
-  private services:common.Service_Definition[] = []
+  private services:Service_Definition[] = []
 
   grow() {
     var ground = this.ground
@@ -78,12 +66,11 @@ class Lawn extends Vineyard.Bulb {
 
     this.config['valid_display_name'] = typeof this.config.valid_display_name == 'string'
       ? new RegExp(this.config.valid_display_name)
-      : /^[A-Za-z\- _0-9!@#\$%\^&\*\(\)?]+$/
+      : /^[A-Za-z\-_0-9]+$/
 
-    irrigation.grow(this)
+    Irrigation.grow(this)
 
-    var gardener = require('./lib/gardener')
-    gardener.grow(this)
+    Gardener.grow(this)
   }
 
   static authorization(handshakeData, callback) {
@@ -121,11 +108,11 @@ class Lawn extends Vineyard.Bulb {
     socket.join('user/' + user.id)
 
     socket.on('query', (request, callback)=>
-        irrigation.process('query', request, user, this.vineyard, socket, callback)
+        Irrigation.process('query', request, user, this.vineyard, socket, callback)
     )
 
     socket.on('update', (request, callback)=>
-        irrigation.process('update', request, user, this.vineyard, socket, callback)
+        Irrigation.process('update', request, user, this.vineyard, socket, callback)
     )
 
     this.on_socket(socket, 'room/join', user, (request)=> {
@@ -429,11 +416,11 @@ class Lawn extends Vineyard.Bulb {
       .then(() => session)
   }
 
-  add_service(definition:common.Service_Definition) {
+  add_service(definition:Service_Definition) {
     this.services.push(definition)
   }
 
-  private create_service(service:common.Service_Definition) {
+  private create_service(service:Service_Definition) {
 
     //var validation_key:string = null
     //if (service.validation) {
@@ -1120,7 +1107,15 @@ class Lawn extends Vineyard.Bulb {
 
 module Lawn {
 
-  export var HttpError
+
+  export interface Mail_Config {
+    transport:Mail_Transport_Config
+    address:string
+  }
+
+  export interface Mail_Transport_Config {
+
+  }
 
   export interface Session_Store_DB {
     host:string
@@ -1145,7 +1140,7 @@ module Lawn {
     admin
     file_path?:string
     mysql_session_store?:Session_Store_Config
-    mail?:Lawn.Mail_Config
+    mail?:Mail_Config
     password_reset_template?:string
     site
     display_name_key:string
@@ -1397,15 +1392,6 @@ module Lawn {
     }
   }
 
-  export interface Mail_Config {
-    transport:Mail_Transport_Config
-    address:string
-  }
-
-  export interface Mail_Transport_Config {
-
-  }
-
   export class Mail {
     transporter
     config:Mail_Config
@@ -1440,7 +1426,7 @@ module Lawn {
       return def.promise
     }
   }
-}
-Lawn.HttpError = common.HttpError
 
-export = Lawn
+  export var HttpError
+}
+Lawn.HttpError = HttpError

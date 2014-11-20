@@ -1,8 +1,56 @@
+/// <reference path="../vineyard/vineyard.d.ts" />
 /// <reference path="defs/socket.io.extension.d.ts" />
 /// <reference path="defs/express.d.ts" />
-/// <reference path="lib/common.d.ts" />
-/// <reference path="lib/irrigation.d.ts" />
-import common = require('./lib/common');
+declare class HttpError {
+    public name: string;
+    public message: any;
+    public stack: any;
+    public status: any;
+    public details: any;
+    public key: any;
+    constructor(message: string, status?: number, key?: any);
+}
+declare class Authorization_Error extends HttpError {
+    constructor(message: string);
+}
+declare function is_authenticated(user: any, fortress: any): boolean;
+declare function is_admin(user: any, fortress: any): any;
+interface Update_Request {
+    objects: any[];
+    version?: number;
+}
+interface Service_Definition {
+    http_path: string;
+    socket_path: string;
+    authorization: (user: any, fortress: any) => any;
+    validation: string;
+    action: (data: any, user: any) => Promise;
+}
+declare class Gardener {
+    static set_config(data: any, lawn: any): any;
+    static grow(lawn: any): void;
+}
+declare class Irrigation {
+    static prepare_fortress(fortress: any, user: any): Promise;
+    static process(method: string, request: Ground.External_Query_Source, user: Vineyard.IUser, vineyard: Vineyard, socket: any, callback: any): Promise;
+    static query(request: Ground.External_Query_Source, user: Vineyard.IUser, lawn: any): Promise;
+    static run_query(query: Ground.Query_Builder, user: Vineyard.IUser, vineyard: Vineyard, request: Ground.External_Query_Source): Promise;
+    static update(request: Update_Request, user: any, ground: Ground.Core, vineyard: Vineyard): Promise;
+    static update2(request: Update_Request, user: any, lawn: any): Promise;
+    static grow(lawn: any): void;
+}
+interface User_Source {
+    name?: string;
+    display_name?: string;
+    username: string;
+    password: string;
+    email?: string;
+    phone?: string;
+    gender?: string;
+    facebook_token?: string;
+    image?: string;
+    address?: any;
+}
 declare class Lawn extends Vineyard.Bulb {
     public io: any;
     public instance_sockets: {};
@@ -39,7 +87,7 @@ declare class Lawn extends Vineyard.Bulb {
     public password_reset_request(req: any, res: any, body: any): Promise;
     public create_password_reset_entry(user_id: any): Promise;
     static create_session(user: any, req: any, ground: any): Promise;
-    public add_service(definition: common.Service_Definition): void;
+    public add_service(definition: Service_Definition): void;
     private create_service(service);
     public check_service(data: any, user: any, authorization: (user: any, fortress: any) => any, validation: string): Promise;
     public send_http_login_success(req: any, res: any, user: any): void;
@@ -67,7 +115,12 @@ declare class Lawn extends Vineyard.Bulb {
     public user_is_online(id: number): boolean;
 }
 declare module Lawn {
-    var HttpError: any;
+    interface Mail_Config {
+        transport: Mail_Transport_Config;
+        address: string;
+    }
+    interface Mail_Transport_Config {
+    }
     interface Session_Store_DB {
         host: string;
         port: number;
@@ -122,17 +175,12 @@ declare module Lawn {
         public notification_receieved(user: any, request: any): Promise;
         public send_pending_notifications(user: any): void;
     }
-    interface Mail_Config {
-        transport: Mail_Transport_Config;
-        address: string;
-    }
-    interface Mail_Transport_Config {
-    }
     class Mail {
         public transporter: any;
         public config: Mail_Config;
         constructor(config: Mail_Config);
         public send(to: any, subject: string, text: string): Promise;
     }
+    var HttpError: any;
 }
-declare module "vineyard-lawn" { export = Lawn }
+declare function typescript_bulb_export_hack(): void;

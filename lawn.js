@@ -276,7 +276,7 @@ var Irrigation = (function () {
         lawn.add_service({
             http_path: 'vineyard/query',
             socket_path: 'query',
-            authorization: is_authenticated,
+            //authorization: is_authenticated,
             validation: 'ground-query',
             action: function (data, user) {
                 return Irrigation.query(data, user, lawn);
@@ -286,7 +286,7 @@ var Irrigation = (function () {
         lawn.add_service({
             http_path: 'vineyard/update',
             socket_path: 'update',
-            authorization: is_authenticated,
+            //authorization: is_authenticated,
             validation: 'ground-update',
             action: function (data, user) {
                 return Irrigation.update2(data, user, lawn);

@@ -197,7 +197,7 @@ class Irrigation {
     lawn.add_service({
       http_path: 'vineyard/query',
       socket_path: 'query',
-      authorization: is_authenticated,
+      //authorization: is_authenticated,
       validation: 'ground-query',
       action: (data, user)=> Irrigation.query(data, user, lawn)
     })
@@ -205,7 +205,7 @@ class Irrigation {
     lawn.add_service({
       http_path: 'vineyard/update',
       socket_path: 'update',
-      authorization: is_authenticated,
+      //authorization: is_authenticated,
       validation: 'ground-update',
       action: (data, user)=> Irrigation.update2(data, user, lawn)
     })

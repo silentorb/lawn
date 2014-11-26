@@ -1,6 +1,7 @@
 /// <reference path="references.ts"/>
 
 class Irrigation {
+  /*
   static prepare_fortress(fortress, user):Promise {
     if (!fortress)
       return when.resolve()
@@ -58,7 +59,7 @@ class Irrigation {
           socket.emit('error', response)
       })
   }
-
+*/
   static query(request:Ground.External_Query_Source, user:Vineyard.IUser, lawn):Promise {
     var ground:Ground.Core = lawn.ground, vineyard:Vineyard = lawn.vineyard
     var Fortress = require('vineyard-fortress')
@@ -124,7 +125,7 @@ class Irrigation {
         return result
       })
   }
-
+/*
   static update(request:Update_Request, user, ground:Ground.Core, vineyard:Vineyard):Promise {
     if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
       throw new HttpError('The request must have a version property.', 400, 'version-required')
@@ -158,7 +159,7 @@ class Irrigation {
           throw new Authorization_Error('You are not authorized to perform this update')
       })
   }
-
+*/
 
   static update2(request:Update_Request, user, lawn):Promise {
     var ground:Ground.Core = lawn.ground, vineyard:Vineyard = lawn.vineyard
@@ -195,7 +196,7 @@ class Irrigation {
     lawn.vineyard.add_json_schema('ground-update', lawn.ground.update_schema)
     lawn.add_service({
       http_path: 'vineyard/query',
-      //socket_path: 'gardener/config',
+      socket_path: 'query',
       authorization: is_authenticated,
       validation: 'ground-query',
       action: (data, user)=> Irrigation.query(data, user, lawn)
@@ -203,22 +204,10 @@ class Irrigation {
 
     lawn.add_service({
       http_path: 'vineyard/update',
-      //socket_path: 'gardener/config',
+      socket_path: 'update',
       authorization: is_authenticated,
       validation: 'ground-update',
       action: (data, user)=> Irrigation.update2(data, user, lawn)
     })
-
-    //request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promis
-    // lawn.listen_user_http('/vineyard/update', (req, res, user)=> {
-    //   return update(req.body, user, lawn.ground, lawn.vineyard)
-    //     .then((result)=> {
-    //       if (!result.status)
-    //         result.status = 200
-    //
-    //       result.message = 'Success'
-    //       res.send(result)
-    //     })
-    // })
   }
 }

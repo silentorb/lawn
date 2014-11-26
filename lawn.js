@@ -84,64 +84,65 @@ var Gardener = (function () {
 var Irrigation = (function () {
     function Irrigation() {
     }
-    Irrigation.prepare_fortress = function (fortress, user) {
-        if (!fortress)
-            return when.resolve();
-
-        return fortress.get_roles(user);
-    };
-
-    Irrigation.process = function (method, request, user, vineyard, socket, callback) {
-        var fortress = vineyard.bulbs.fortress;
-        var action = method == 'query' ? Irrigation.query : Irrigation.update;
-        return Irrigation.prepare_fortress(fortress, user).then(function () {
-            return action(request, user, vineyard.ground, vineyard);
-        }).then(function (result) {
-            result.status = 200;
-            result.message = 'Success';
-            if (callback)
-                callback(result);
-            else if (method != 'update')
-                socket.emit('error', {
-                    status: 400,
-                    message: 'Query requests need to ask for an acknowledgement',
-                    request: request
-                });
-        }, function (error) {
-            //          if (callback)
-            //            callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [],
-            //              unauthorized_object: error.resource})
-            //          else
-            error = error || {};
-            console.log(method + 'service error:', error.message, error.status, error.stack);
-            console.log(JSON.stringify(request));
-            var status = error.status || 500;
-
-            var response = {
-                code: status,
-                status: status,
-                request: request,
-                message: status == 500 ? "Server Error" : error.message,
-                key: error.key || 'unknown'
-            };
-
-            if (fortress.user_has_role(user, 'dev')) {
-                response.message = error.message || "Server Error";
-                response['stack'] = error.stack;
-                details:
-                error.details;
-            }
-
-            if (vineyard.bulbs.lawn.debug_mode)
-                console.log('error', error.stack);
-
-            if (callback)
-                callback(response);
-            else
-                socket.emit('error', response);
-        });
-    };
-
+    /*
+    static prepare_fortress(fortress, user):Promise {
+    if (!fortress)
+    return when.resolve()
+    
+    return fortress.get_roles(user)
+    }
+    
+    static process(method:string, request:Ground.External_Query_Source, user:Vineyard.IUser, vineyard:Vineyard, socket, callback):Promise {
+    var fortress = vineyard.bulbs.fortress
+    var action:any = method == 'query' ? Irrigation.query : Irrigation.update
+    return Irrigation.prepare_fortress(fortress, user)
+    .then(()=> action(request, user, vineyard.ground, vineyard))
+    .then((result)=> {
+    result.status = 200
+    result.message = 'Success'
+    if (callback)
+    callback(result)
+    else if (method != 'update')
+    socket.emit('error', {
+    status: 400,
+    message: 'Query requests need to ask for an acknowledgement',
+    request: request
+    })
+    },
+    (error)=> {
+    //          if (callback)
+    //            callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [],
+    //              unauthorized_object: error.resource})
+    //          else
+    error = error || {}
+    console.log(method + 'service error:', error.message, error.status, error.stack)
+    console.log(JSON.stringify(request))
+    var status = error.status || 500
+    
+    var response = {
+    code: status,
+    status: status,
+    request: request,
+    message: status == 500 ? "Server Error" : error.message,
+    key: error.key || 'unknown'
+    }
+    
+    if (fortress.user_has_role(user, 'dev')) {
+    response.message = error.message || "Server Error"
+    response['stack'] = error.stack
+    details: error.details
+    }
+    
+    if (vineyard.bulbs.lawn.debug_mode)
+    console.log('error', error.stack)
+    
+    if (callback)
+    callback(response)
+    else
+    socket.emit('error', response)
+    })
+    }
+    */
     Irrigation.query = function (request, user, lawn) {
         var ground = lawn.ground, vineyard = lawn.vineyard;
         var Fortress = require('vineyard-fortress');
@@ -205,39 +206,41 @@ var Irrigation = (function () {
         });
     };
 
-    Irrigation.update = function (request, user, ground, vineyard) {
-        if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
-            throw new HttpError('The request must have a version property.', 400, 'version-required');
-
-        if (user.id == 2)
-            throw new HttpError('Anonymous cannot create content.', 403);
-
-        if (!MetaHub.is_array(request.objects))
-            throw new HttpError('Update is missing objects list.', 400);
-
-        var updates = request.objects.map(function (object) {
-            return ground.create_update(object.trellis, object, user);
-        });
-
-        if (!request.objects)
-            throw new HttpError('Request requires an objects array', 400);
-
-        var fortress = vineyard.bulbs.fortress;
-        return fortress.update_access(user, updates).then(function (result) {
-            if (result.is_allowed) {
-                var update_promises = updates.map(function (update) {
-                    return update.run();
-                });
-                return when.all(update_promises).then(function (objects) {
-                    return {
-                        objects: objects
-                    };
-                });
-            } else
-                throw new Authorization_Error('You are not authorized to perform this update');
-        });
-    };
-
+    /*
+    static update(request:Update_Request, user, ground:Ground.Core, vineyard:Vineyard):Promise {
+    if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
+    throw new HttpError('The request must have a version property.', 400, 'version-required')
+    
+    if (user.id == 2)
+    throw new HttpError('Anonymous cannot create content.', 403);
+    
+    if (!MetaHub.is_array(request.objects))
+    throw new HttpError('Update is missing objects list.', 400)
+    
+    var updates = request.objects.map((object)=>
+    ground.create_update(object.trellis, object, user)
+    )
+    
+    if (!request.objects)
+    throw new HttpError('Request requires an objects array', 400);
+    
+    var fortress = vineyard.bulbs.fortress
+    return fortress.update_access(user, updates)
+    .then((result)=> {
+    if (result.is_allowed) {
+    var update_promises = updates.map((update) => update.run())
+    return when.all(update_promises)
+    .then((objects)=> {
+    return {
+    objects: objects
+    }
+    })
+    }
+    else
+    throw new Authorization_Error('You are not authorized to perform this update')
+    })
+    }
+    */
     Irrigation.update2 = function (request, user, lawn) {
         var ground = lawn.ground, vineyard = lawn.vineyard;
         if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
@@ -272,7 +275,7 @@ var Irrigation = (function () {
         lawn.vineyard.add_json_schema('ground-update', lawn.ground.update_schema);
         lawn.add_service({
             http_path: 'vineyard/query',
-            //socket_path: 'gardener/config',
+            socket_path: 'query',
             authorization: is_authenticated,
             validation: 'ground-query',
             action: function (data, user) {
@@ -282,24 +285,13 @@ var Irrigation = (function () {
 
         lawn.add_service({
             http_path: 'vineyard/update',
-            //socket_path: 'gardener/config',
+            socket_path: 'update',
             authorization: is_authenticated,
             validation: 'ground-update',
             action: function (data, user) {
                 return Irrigation.update2(data, user, lawn);
             }
         });
-        //request:Ground.External_Query_Source, user:Vineyard.IUser, ground:Ground.Core, vineyard:Vineyard):Promis
-        // lawn.listen_user_http('/vineyard/update', (req, res, user)=> {
-        //   return update(req.body, user, lawn.ground, lawn.vineyard)
-        //     .then((result)=> {
-        //       if (!result.status)
-        //         result.status = 200
-        //
-        //       result.message = 'Success'
-        //       res.send(result)
-        //     })
-        // })
     };
     return Irrigation;
 })();
@@ -362,17 +354,6 @@ var Lawn = (function (_super) {
         return callback(null, true);
     };
 
-    Lawn.prototype.debug = function () {
-        var args = [];
-        for (var _i = 0; _i < (arguments.length - 0); _i++) {
-            args[_i] = arguments[_i + 0];
-        }
-        var time = Math.round(new Date().getTime() / 10);
-        var text = args.join(', ');
-        console.log(text);
-        //      return this.ground.db.query("INSERT INTO debug (source, message, time) VALUES ('server', '" + text + "', " + time + ")");
-    };
-
     Lawn.prototype.emit_to_users = function (users, name, data) {
         return this.vineyard.bulbs.songbird.notify(users, name, data);
     };
@@ -388,7 +369,6 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.initialize_session = function (socket, user) {
-        var _this = this;
         socket.user = user;
         this.instance_sockets[socket.id] = socket;
         this.instance_user_sockets[user.id] = this.instance_user_sockets[user.id] || [];
@@ -397,14 +377,13 @@ var Lawn = (function (_super) {
 
         socket.join('user/' + user.id);
 
-        socket.on('query', function (request, callback) {
-            return Irrigation.process('query', request, user, _this.vineyard, socket, callback);
-        });
-
-        socket.on('update', function (request, callback) {
-            return Irrigation.process('update', request, user, _this.vineyard, socket, callback);
-        });
-
+        //socket.on('query', (request, callback)=>
+        //    Irrigation.process('query', request, user, this.vineyard, socket, callback)
+        //)
+        //
+        //socket.on('update', (request, callback)=>
+        //    Irrigation.process('update', request, user, this.vineyard, socket, callback)
+        //)
         this.on_socket(socket, 'room/join', user, function (request) {
             console.log('room/join', user.id, request);
             socket.join(request.room);
@@ -420,6 +399,12 @@ var Lawn = (function (_super) {
             socket.broadcast.to(request.room).emit(request.event_name, request.data);
         });
 
+        for (var i in this.services) {
+            var service = this.services[i];
+            if (service.socket_path)
+                this.create_socket_service(socket, user, service);
+        }
+
         user.online = true;
         this.invoke('socket.add', socket, user);
 
@@ -428,13 +413,10 @@ var Lawn = (function (_super) {
 
     // Attach user online status to any queried users
     Lawn.prototype.query_user = function (user, query) {
-        //    console.log('modifying query')
         if (!this.io)
             return;
 
         var clients = this.io.sockets.clients(user.id);
-        //    console.log('modifying query', clients.length)
-        //    user.online = clients.length > 0
     };
 
     Lawn.prototype.start = function () {
@@ -678,48 +660,67 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.create_service = function (service) {
-        //var validation_key:string = null
-        //if (service.validation) {
-        //  if (service.validation.indexOf('.json') > -1) {
-        //    var code_file_path = Error()['stack'].split("\n")[3].match(/\((.+?):\d/)[1]
-        //    var Path = require('path')
-        //    var dir = Path.dirname(code_file_path)
-        //    validation_key = Path.resolve(dir, service.validation)
-        //    console.log('validation', validation_key)
-        //    this.vineyard.load_json_schema(validation_key, validation_key)
-        //  }
-        //  else {
-        //    validation_key = service.validation
-        //  }
-        //}
         var _this = this;
-        if (service.http_path) {
-            if (service.http_path[0] != '/')
-                service.http_path = '/' + service.http_path;
+        if (service.http_path[0] != '/')
+            service.http_path = '/' + service.http_path;
 
-            this.app.post(service.http_path, function (req, res) {
-                var user = null;
+        this.app.post(service.http_path, function (req, res) {
+            var user = null;
 
-                // Start with a promise so all possible errors (short of one inside when.js) are
-                // handled through promise rejections.  Otherwise we would need a try/catch here
-                // and redundant error handling.
-                when.resolve().then(function () {
-                    return _this.get_user_from_session(req.sessionID);
-                }).then(function (u) {
-                    user = u;
-                    return _this.check_service(req.body, user, service.authorization, service.validation);
-                }).then(function () {
-                    return service.action(req.body, user);
-                }).done(function (response) {
-                    res.send(response);
-                }, function (error) {
-                    var response = _this.process_error(error, user);
-                    var status = response.status;
-                    delete response.status;
-                    res.status(status).json(response);
-                });
+            // Start with a promise so all possible errors (short of one inside when.js) are
+            // handled through promise rejections.  Otherwise we would need a try/catch here
+            // and redundant error handling.
+            when.resolve().then(function () {
+                return _this.get_user_from_session(req.sessionID);
+            }).then(function (u) {
+                user = u;
+                return _this.run_service(service, req.body, user);
+            }).done(function (response) {
+                res.send(response);
+            }, function (error) {
+                var response = _this.process_error(error, user);
+                var status = response.status;
+                delete response.status;
+                res.status(status).json(response);
             });
-        }
+        });
+    };
+
+    Lawn.prototype.run_service = function (service, body, user) {
+        var _this = this;
+        var pipeline = require('when/pipeline');
+        return pipeline([
+            function () {
+                return _this.check_service(body, user, service.authorization, service.validation);
+            },
+            function () {
+                return service.action(body, user);
+            }
+        ]);
+    };
+
+    Lawn.prototype.create_socket_service = function (socket, user, service) {
+        var _this = this;
+        socket.on(service.socket_path, function (body, callback) {
+            return _this.run_service(service, body, user).done(function (response) {
+                if (callback)
+                    callback(response);
+            }, function (error) {
+                error = error || {};
+                console.log('socket error with path ' + service.socket_path + ':', error.message, error.status, error.stack);
+                console.log(JSON.stringify(body));
+                var status = error.status || 500;
+
+                var response = {
+                    status: status,
+                    request: body,
+                    message: status == 500 ? "Server Error" : error.message,
+                    key: error.key || 'unknown'
+                };
+
+                socket.emit('error', response);
+            });
+        });
     };
 
     Lawn.prototype.check_service = function (data, user, authorization, validation) {
@@ -770,7 +771,7 @@ var Lawn = (function (_super) {
             return when.reject(new HttpError('Invalid email address.', 400));
 
         if (typeof password != 'string' || password.length > 32 || !password.match(this.config.valid_password))
-            return when.reject(new HttpError('Invalid username.', 400));
+            return when.reject(new HttpError('Invalid password.', 400));
 
         if (typeof display_name != 'string')
             display_name = null;
@@ -968,14 +969,12 @@ var Lawn = (function (_super) {
         socket.emit('connection');
         return socket.on('disconnect', function () {
             var data, user;
-            _this.debug('***detected disconnect');
             user = socket.user;
             if (user)
                 delete _this.instance_user_sockets[user.id][socket.id];
 
             delete _this.instance_sockets[socket.id];
             if (user && !_this.user_is_online(user.id)) {
-                _this.debug(user.id);
                 data = user;
                 if (_this.ground.db.active)
                     return _this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id);
@@ -1222,29 +1221,11 @@ var Lawn = (function (_super) {
         }, 'get');
 
         for (var i in this.services) {
-            this.create_service(this.services[i]);
+            var service = this.services[i];
+            if (service.socket_path)
+                this.create_service(service);
         }
 
-        //this.listen_user_http('/vineyard/query', (req, res, user)=> {
-        //  return irrigation.query(req.body, user, this.ground, this.vineyard)
-        //    .then((result)=> {
-        //      if (!result.status)
-        //        result.status = 200
-        //
-        //      result.message = 'Success'
-        //      res.send(result)
-        //    })
-        //})
-        //this.listen_user_http('/vineyard/update', (req, res, user)=> {
-        //  return irrigation.update(req.body, user, this.ground, this.vineyard)
-        //    .then((result)=> {
-        //      if (!result.status)
-        //        result.status = 200
-        //
-        //      result.message = 'Success'
-        //      res.send(result)
-        //    })
-        //})
         this.listen_public_http('/vineyard/password-reset', function (req, res) {
             return _this.password_reset_request(req, res, req.body);
         });
@@ -1637,8 +1618,10 @@ var Lawn;
     Lawn.Mail = Mail;
 
     Lawn.HttpError;
+    Lawn.Irrigation;
 })(Lawn || (Lawn = {}));
 Lawn.HttpError = HttpError;
+Lawn.Irrigation = Irrigation;
 /**
 * User: Chris Johnson
 * Date: 11/9/2014
@@ -1658,4 +1641,3 @@ Lawn.HttpError = HttpError;
 module.exports = Lawn
 function typescript_bulb_export_hack() {
 }
-//# sourceMappingURL=lawn.js.map

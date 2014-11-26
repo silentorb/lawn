@@ -31,11 +31,8 @@ declare class Gardener {
     static grow(lawn: any): void;
 }
 declare class Irrigation {
-    static prepare_fortress(fortress: any, user: any): Promise;
-    static process(method: string, request: Ground.External_Query_Source, user: Vineyard.IUser, vineyard: Vineyard, socket: any, callback: any): Promise;
     static query(request: Ground.External_Query_Source, user: Vineyard.IUser, lawn: any): Promise;
     static run_query(query: Ground.Query_Builder, user: Vineyard.IUser, vineyard: Vineyard, request: Ground.External_Query_Source): Promise;
-    static update(request: Update_Request, user: any, ground: Ground.Core, vineyard: Vineyard): Promise;
     static update2(request: Update_Request, user: any, lawn: any): Promise;
     static grow(lawn: any): void;
 }
@@ -65,7 +62,6 @@ declare class Lawn extends Vineyard.Bulb {
     private services;
     public grow(): void;
     static authorization(handshakeData: any, callback: any): any;
-    public debug(...args: any[]): void;
     public emit_to_users(users: any, name: any, data: any): Promise;
     public notify(users: any, name: any, data: any, trellis_name: string): Promise;
     public get_user_sockets(id: number): Socket[];
@@ -89,6 +85,8 @@ declare class Lawn extends Vineyard.Bulb {
     static create_session(user: any, req: any, ground: any): Promise;
     public add_service(definition: Service_Definition): void;
     private create_service(service);
+    private run_service(service, body, user);
+    private create_socket_service(socket, user, service);
     public check_service(data: any, user: any, authorization: (user: any, fortress: any) => any, validation: string): Promise;
     public send_http_login_success(req: any, res: any, user: any): void;
     public register(req: any, res: any): Promise;
@@ -182,5 +180,6 @@ declare module Lawn {
         public send(to: any, subject: string, text: string): Promise;
     }
     var HttpError: any;
+    var Irrigation: any;
 }
 declare function typescript_bulb_export_hack(): void;

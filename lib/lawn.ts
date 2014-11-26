@@ -77,14 +77,6 @@ class Lawn extends Vineyard.Bulb {
     return callback(null, true);
   }
 
-  debug(...
-          args:any[]) {
-    var time = Math.round(new Date().getTime() / 10);
-    var text = args.join(', ');
-    console.log(text)
-//      return this.ground.db.query("INSERT INTO debug (source, message, time) VALUES ('server', '" + text + "', " + time + ")");
-  }
-
   emit_to_users(users, name, data):Promise {
     return this.vineyard.bulbs.songbird.notify(users, name, data)
   }
@@ -107,13 +99,13 @@ class Lawn extends Vineyard.Bulb {
 
     socket.join('user/' + user.id)
 
-    socket.on('query', (request, callback)=>
-        Irrigation.process('query', request, user, this.vineyard, socket, callback)
-    )
-
-    socket.on('update', (request, callback)=>
-        Irrigation.process('update', request, user, this.vineyard, socket, callback)
-    )
+    //socket.on('query', (request, callback)=>
+    //    Irrigation.process('query', request, user, this.vineyard, socket, callback)
+    //)
+    //
+    //socket.on('update', (request, callback)=>
+    //    Irrigation.process('update', request, user, this.vineyard, socket, callback)
+    //)
 
     this.on_socket(socket, 'room/join', user, (request)=> {
         console.log('room/join', user.id, request)
@@ -133,6 +125,12 @@ class Lawn extends Vineyard.Bulb {
       }
     )
 
+    for (var i in this.services) {
+      var service = this.services[i]
+      if (service.socket_path)
+        this.create_socket_service(socket, user, service)
+    }
+
     user.online = true
     this.invoke('socket.add', socket, user)
 
@@ -141,13 +139,10 @@ class Lawn extends Vineyard.Bulb {
 
   // Attach user online status to any queried users
   query_user(user, query:Ground.Query_Builder) {
-//    console.log('modifying query')
     if (!this.io)
       return
 
     var clients = this.io.sockets.clients(user.id)
-//    console.log('modifying query', clients.length)
-//    user.online = clients.length > 0
   }
 
   start() {
@@ -421,49 +416,62 @@ class Lawn extends Vineyard.Bulb {
   }
 
   private create_service(service:Service_Definition) {
+    if (service.http_path[0] != '/')
+      service.http_path = '/' + service.http_path
 
-    //var validation_key:string = null
-    //if (service.validation) {
-    //  if (service.validation.indexOf('.json') > -1) {
-    //    var code_file_path = Error()['stack'].split("\n")[3].match(/\((.+?):\d/)[1]
-    //    var Path = require('path')
-    //    var dir = Path.dirname(code_file_path)
-    //    validation_key = Path.resolve(dir, service.validation)
-    //    console.log('validation', validation_key)
-    //    this.vineyard.load_json_schema(validation_key, validation_key)
-    //  }
-    //  else {
-    //    validation_key = service.validation
-    //  }
-    //}
+    this.app.post(service.http_path, (req, res)=> {
+        var user = null
+        // Start with a promise so all possible errors (short of one inside when.js) are
+        // handled through promise rejections.  Otherwise we would need a try/catch here
+        // and redundant error handling.
+        when.resolve()
+          .then(()=> this.get_user_from_session(req.sessionID))
+          .then((u)=> {
+            user = u
+            return this.run_service(service, req.body, user)
+          })
+          .done((response)=> {
+            res.send(response)
+          }, (error)=> {
+            var response = this.process_error(error, user)
+            var status = response.status
+            delete response.status
+            res.status(status).json(response)
+          })
+      }
+    )
+  }
 
-    if (service.http_path) {
-      if (service.http_path[0] != '/')
-        service.http_path = '/' + service.http_path
+  private run_service(service, body, user):Promise {
+    var pipeline:any = require('when/pipeline')
+    return pipeline([
+      ()=> this.check_service(body, user, service.authorization, service.validation),
+      ()=> service.action(body, user)
+    ])
+  }
 
-      this.app.post(service.http_path, (req, res)=> {
-          var user = null
-          // Start with a promise so all possible errors (short of one inside when.js) are
-          // handled through promise rejections.  Otherwise we would need a try/catch here
-          // and redundant error handling.
-          when.resolve()
-            .then(()=> this.get_user_from_session(req.sessionID))
-            .then((u)=> {
-              user = u
-              return this.check_service(req.body, user, service.authorization, service.validation)
-            })
-            .then(()=> service.action(req.body, user))
-            .done((response)=> {
-              res.send(response)
-            }, (error)=> {
-              var response = this.process_error(error, user)
-              var status = response.status
-              delete response.status
-              res.status(status).json(response)
-            })
-        }
-      )
-    }
+  private create_socket_service(socket, user, service:Service_Definition) {
+    socket.on(service.socket_path, (body, callback)=>
+        this.run_service(service, body, user)
+          .done((response)=> {
+            if (callback)
+              callback(response)
+          }, (error)=> {
+            error = error || {}
+            console.log('socket error with path ' + service.socket_path + ':', error.message, error.status, error.stack)
+            console.log(JSON.stringify(body))
+            var status = error.status || 500
+
+            var response = {
+              status: status,
+              request: body,
+              message: status == 500 ? "Server Error" : error.message,
+              key: error.key || 'unknown'
+            }
+
+            socket.emit('error', response)
+          })
+    )
   }
 
   check_service(data, user, authorization:(user, fortress)=>any, validation:string):Promise {
@@ -651,8 +659,7 @@ class Lawn extends Vineyard.Bulb {
       })
   }
 
-  static
-  request(options, data = null, secure = false):Promise {
+  static request(options, data = null, secure = false):Promise {
     var def = when.defer()
     var http = require(secure ? 'https' : 'http')
 //    if (secure)
@@ -729,14 +736,12 @@ class Lawn extends Vineyard.Bulb {
     socket.emit('connection');
     return socket.on('disconnect', () => {
       var data, user;
-      this.debug('***detected disconnect');
       user = socket.user;
       if (user)
         delete this.instance_user_sockets[user.id][socket.id]
 
       delete this.instance_sockets[socket.id];
       if (user && !this.user_is_online(user.id)) {
-        this.debug(user.id);
         data = user
         if (this.ground.db.active)
           return this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id)
@@ -932,7 +937,7 @@ class Lawn extends Vineyard.Bulb {
     app.use(parser.json())
     app.use(require('cookie-parser')());
 
-    var session = require('express-session')
+    var session:any = require('express-session')
     if (typeof this.config.mysql_session_store == 'object') {
       var MySQL_Session_Store = require('express-mysql-session')
       var storage_config = <Lawn.Session_Store_Config>this.config.mysql_session_store
@@ -976,29 +981,10 @@ class Lawn extends Vineyard.Bulb {
     this.listen_user_http('/vineyard/logout', (req, res, user)=> this.logout(req, res, user), 'get')
 
     for (var i in this.services) {
-      this.create_service(this.services[i])
+      var service = this.services[i]
+      if (service.socket_path)
+        this.create_service(service)
     }
-    //this.listen_user_http('/vineyard/query', (req, res, user)=> {
-    //  return irrigation.query(req.body, user, this.ground, this.vineyard)
-    //    .then((result)=> {
-    //      if (!result.status)
-    //        result.status = 200
-    //
-    //      result.message = 'Success'
-    //      res.send(result)
-    //    })
-    //})
-
-    //this.listen_user_http('/vineyard/update', (req, res, user)=> {
-    //  return irrigation.update(req.body, user, this.ground, this.vineyard)
-    //    .then((result)=> {
-    //      if (!result.status)
-    //        result.status = 200
-    //
-    //      result.message = 'Success'
-    //      res.send(result)
-    //    })
-    //})
 
     this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_request(req, res, req.body))
     this.listen_user_http('/vineyard/current-user', (req, res, user)=> {
@@ -1428,5 +1414,7 @@ module Lawn {
   }
 
   export var HttpError
+  export var Irrigation
 }
 Lawn.HttpError = HttpError
+Lawn.Irrigation = Irrigation

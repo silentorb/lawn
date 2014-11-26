@@ -1,6 +1,6 @@
 {
   "name": "vineyard-lawn",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Vineyard Node.js HTTP/Socket.IO server",
   "main": "lawn.js",
   "repository": {
@@ -13,7 +13,6 @@
     "body-parser": "^1.9.2",
     "cookie-parser": "^1.3.3",
     "express": "4.x.x",
-    "express-mysql-session": "0.x.x",
     "express-session": "^1.9.1",
     "redis": "~0.8.6",
     "socket.io": "0.9.x"

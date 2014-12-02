@@ -103,9 +103,10 @@ var Irrigation = (function () {
         var fortress = vineyard.bulbs.fortress;
         return fortress.query_access(user, query).then(function (result) {
             console.log('fortress', result);
-            if (result.is_allowed)
+            if (result.is_allowed) {
+                result.secure_query(query);
                 return Irrigation.run_query(query, user, vineyard, request);
-            else {
+            } else {
                 throw new Authorization_Error(result.get_message());
             }
         });
@@ -685,9 +686,10 @@ var Lawn = (function (_super) {
 
             var fortress = this.vineyard.bulbs.fortress;
             return fortress.query_access(user, query).then(function (result) {
-                if (result.is_allowed)
+                if (result.is_allowed) {
+                    result.secure_query(query);
                     return run_query();
-                else {
+                } else {
                     var sql = "DELETE FROM sessions WHERE user = ? AND token = ?";
                     return _this.ground.db.query(sql, [user.id, req.sessionID]).then(function () {
                         throw new Authorization_Error(result.get_message());

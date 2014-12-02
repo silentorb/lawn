@@ -532,8 +532,10 @@ class Lawn extends Vineyard.Bulb {
 
           var fortress = this.vineyard.bulbs.fortress
           return fortress.query_access(user, query).then((result)=> {
-              if (result.is_allowed)
-                  return run_query()
+              if (result.is_allowed) {
+								result.secure_query(query)
+								return run_query()
+							}
               else {
                   var sql = "DELETE FROM sessions WHERE user = ? AND token = ?";
                   return this.ground.db.query(sql, [user.id, req.sessionID])

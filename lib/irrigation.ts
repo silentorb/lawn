@@ -22,8 +22,10 @@ class Irrigation {
     return fortress.query_access(user, query)
       .then((result)=> {
             console.log('fortress', result)
-        if (result.is_allowed)
-          return Irrigation.run_query(query, user, vineyard, request)
+        if (result.is_allowed) {
+					result.secure_query(query)
+					return Irrigation.run_query(query, user, vineyard, request)
+				}
         else {
           throw new Authorization_Error(result.get_message())
         }

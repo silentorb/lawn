@@ -1,65 +1,7 @@
 /// <reference path="references.ts"/>
 
 class Irrigation {
-  /*
-  static prepare_fortress(fortress, user):Promise {
-    if (!fortress)
-      return when.resolve()
 
-    return fortress.get_roles(user)
-  }
-
-  static process(method:string, request:Ground.External_Query_Source, user:Vineyard.IUser, vineyard:Vineyard, socket, callback):Promise {
-    var fortress = vineyard.bulbs.fortress
-    var action:any = method == 'query' ? Irrigation.query : Irrigation.update
-    return Irrigation.prepare_fortress(fortress, user)
-      .then(()=> action(request, user, vineyard.ground, vineyard))
-      .then((result)=> {
-        result.status = 200
-        result.message = 'Success'
-        if (callback)
-          callback(result)
-        else if (method != 'update')
-          socket.emit('error', {
-            status: 400,
-            message: 'Query requests need to ask for an acknowledgement',
-            request: request
-          })
-      },
-      (error)=> {
-//          if (callback)
-//            callback({ code: 403, 'message': 'You are not authorized to perform this update.', objects: [],
-//              unauthorized_object: error.resource})
-//          else
-        error = error || {}
-        console.log(method + 'service error:', error.message, error.status, error.stack)
-        console.log(JSON.stringify(request))
-        var status = error.status || 500
-
-        var response = {
-          code: status,
-          status: status,
-          request: request,
-          message: status == 500 ? "Server Error" : error.message,
-          key: error.key || 'unknown'
-        }
-
-        if (fortress.user_has_role(user, 'dev')) {
-          response.message = error.message || "Server Error"
-          response['stack'] = error.stack
-          details: error.details
-        }
-
-        if (vineyard.bulbs.lawn.debug_mode)
-          console.log('error', error.stack)
-
-        if (callback)
-          callback(response)
-        else
-          socket.emit('error', response)
-      })
-  }
-*/
   static query(request:Ground.External_Query_Source, user:Vineyard.IUser, lawn):Promise {
     var ground:Ground.Core = lawn.ground, vineyard:Vineyard = lawn.vineyard
     var Fortress = require('vineyard-fortress')
@@ -79,6 +21,7 @@ class Irrigation {
     var fortress = vineyard.bulbs.fortress
     return fortress.query_access(user, query)
       .then((result)=> {
+            console.log('fortress', result)
         if (result.is_allowed)
           return Irrigation.run_query(query, user, vineyard, request)
         else {
@@ -125,41 +68,6 @@ class Irrigation {
         return result
       })
   }
-/*
-  static update(request:Update_Request, user, ground:Ground.Core, vineyard:Vineyard):Promise {
-    if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
-      throw new HttpError('The request must have a version property.', 400, 'version-required')
-
-    if (user.id == 2)
-      throw new HttpError('Anonymous cannot create content.', 403);
-
-    if (!MetaHub.is_array(request.objects))
-      throw new HttpError('Update is missing objects list.', 400)
-
-    var updates = request.objects.map((object)=>
-        ground.create_update(object.trellis, object, user)
-    )
-
-    if (!request.objects)
-      throw new HttpError('Request requires an objects array', 400);
-
-    var fortress = vineyard.bulbs.fortress
-    return fortress.update_access(user, updates)
-      .then((result)=> {
-        if (result.is_allowed) {
-          var update_promises = updates.map((update) => update.run())
-          return when.all(update_promises)
-            .then((objects)=> {
-              return {
-                objects: objects
-              }
-            })
-        }
-        else
-          throw new Authorization_Error('You are not authorized to perform this update')
-      })
-  }
-*/
 
   static update2(request:Update_Request, user, lawn):Promise {
     var ground:Ground.Core = lawn.ground, vineyard:Vineyard = lawn.vineyard

@@ -88,7 +88,7 @@ declare class Lawn extends Vineyard.Bulb {
     private run_service(service, body, user);
     private create_socket_service(socket, user, service);
     public check_service(data: any, user: any, authorization: (user: any, fortress: any) => any, validation: string): Promise;
-    public send_http_login_success(req: any, res: any, user: any): void;
+    public send_http_login_success(req: any, res: any, user: any, query_arguments?: any): any;
     public register(req: any, res: any): Promise;
     public link_facebook_user(req: any, res: any, user: any): Promise;
     static request(options: any, data?: any, secure?: boolean): Promise;
@@ -149,6 +149,7 @@ declare module Lawn {
         valid_display_name?: any;
         valid_password?: any;
         allow_cors?: boolean;
+        allow_register?: boolean;
     }
     class Facebook extends Vineyard.Bulb {
         public lawn: Lawn;

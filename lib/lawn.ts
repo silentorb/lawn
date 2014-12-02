@@ -174,7 +174,9 @@ class Lawn extends Vineyard.Bulb {
   }
 
   private static format_internal_user(user) {
-    return MetaHub.extend({}, user, Lawn.internal_user_properties)
+    var result = MetaHub.extend({}, user)
+    delete result.password
+    return result
   }
 
   get_public_user(user):Promise {
@@ -228,8 +230,8 @@ class Lawn extends Vineyard.Bulb {
     if (typeof body.facebook_token === 'string')
       return this.vineyard.bulbs.facebook.login(req, res, body)
 
-    var username = body.name
-    var password = body.pass
+    var username = body.username || body.name
+    var password = body.password || body.pass
 
     var sql = "SELECT id, " + this.config.display_name_key
       + ", status FROM users WHERE username = ? AND password = ?"
@@ -274,10 +276,17 @@ class Lawn extends Vineyard.Bulb {
         if (user.status === 2)
           throw new HttpError('This account is awaiting email verification.', 403)
 
-        this.invoke('user.login', user, body)
+        var roles_sql = 'SELECT * FROM roles'
+            + '\nJOIN roles_users ON roles.id = roles_users.role'
+            + '\nWHERE user = ?'
+        return this.ground.db.query(roles_sql, [user.id])
+            .then((roles)=> {
+                user.roles = roles
+                return this.invoke('user.login', user, body)
+            })
           .then(()=> {
             return Lawn.create_session(user, req, this.ground)
-              .then(()=> this.send_http_login_success(req, res, user))
+              .then(()=> this.send_http_login_success(req, res, user, body))
           })
       })
   }
@@ -502,10 +511,10 @@ class Lawn extends Vineyard.Bulb {
     return when.resolve()
   }
 
-  send_http_login_success(req, res, user) {
+  send_http_login_success(req, res, user, query_arguments = null) {
     var query = this.ground.create_query('user')
     query.add_key_filter(user.id)
-    query.run_single()
+    var run_query = ()=> query.run_single()
       .then((row)=> {
         res.send({
           token: req.sessionID,
@@ -513,6 +522,29 @@ class Lawn extends Vineyard.Bulb {
           user: Lawn.format_internal_user(row)
         })
       })
+
+      if (query_arguments && (query_arguments.properties || query_arguments.expansions)) {
+          if (query_arguments.properties)
+              query.add_properties(query_arguments.properties)
+
+          if (MetaHub.is_array(query_arguments.expansions))
+              query.add_expansions(query_arguments.expansions)
+
+          var fortress = this.vineyard.bulbs.fortress
+          return fortress.query_access(user, query).then((result)=> {
+              if (result.is_allowed)
+                  return run_query()
+              else {
+                  var sql = "DELETE FROM sessions WHERE user = ? AND token = ?";
+                  return this.ground.db.query(sql, [user.id, req.sessionID])
+                      .then(()=> {
+                      throw new Authorization_Error(result.get_message());
+                  })
+              }
+          })
+      } else {
+          return run_query();
+      }
   }
 
 
@@ -557,22 +589,31 @@ class Lawn extends Vineyard.Bulb {
           if (rows.length > 0)
             return when.reject(new HttpError('That ' + rows[0].value + ' is already taken.', 400))
 
-          // Not so worried about invalid gender, just filter it
-          var gender = body.gender
-          if (gender !== 'male' && gender !== 'female')
-            gender = null
+          var user = {};
+          var trellis = this.ground.trellises['user']
+          var properties = trellis.get_all_properties()
+          for (var i in properties) {
+              var property = properties[i]
+              //console.log(property.name, property == trellis.primary_key || property.other_trellis != null, body[property.name]);
+              if (property == trellis.primary_key)
+                  continue
 
-          var user = {
-            username: username,
-            email: email,
-            password: body.password,
-            gender: gender,
-            phone: phone,
-            roles: [2],
-            address: body.address,
-            image: body.image
+              if (body[property.name] !== undefined && typeof body[property.name] !== 'object')
+                  user[property.name] = body[property.name]
           }
-          user[this.config.display_name_key] = display_name
+          user['roles'] = [2];
+
+          //var user = {
+          //  username: username,
+          //  email: email,
+          //  password: body.password,
+          //  gender: gender,
+          //  phone: phone,
+          //  roles: [2],
+          //  address: body.address,
+          //  image: body.image
+          //}
+          //user[this.config.display_name_key] = display_name
 
           console.log('user', user, facebook_id)
           this.ground.create_update('user', user).run()
@@ -980,6 +1021,9 @@ class Lawn extends Vineyard.Bulb {
     this.listen_user_http('/vineyard/logout', (req, res, user)=> this.logout(req, res, user))
     this.listen_user_http('/vineyard/logout', (req, res, user)=> this.logout(req, res, user), 'get')
 
+    if (this.config.allow_register)
+      this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
+
     for (var i in this.services) {
       var service = this.services[i]
       if (service.socket_path)
@@ -1135,6 +1179,7 @@ module Lawn {
     valid_display_name?
     valid_password?
     allow_cors?:boolean
+		allow_register?: boolean
   }
 
   export class Facebook extends Vineyard.Bulb {
@@ -1197,7 +1242,7 @@ module Lawn {
 //                  + '&access_token=' + body.facebook_token,
 //                method: 'GET'
 //              }
-//
+
 //              return Lawn.request(options, null, true)
 //                .then((response) => {
 //                  console.log('fb-user', response.content)

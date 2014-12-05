@@ -387,16 +387,7 @@ var Lawn = (function (_super) {
 
         return query.run_single().then(function (session) {
             //console.log('session', session)
-            if (!session)
-                throw new HttpError('Session not found.', 401);
-
-            if (session.token === 0)
-                throw new HttpError('Invalid session.', 401);
-
-            if (typeof session.user !== 'object')
-                throw new HttpError('User not found.', 401);
-
-            var user = session.user;
+            var user = !session || session.token === 0 || typeof session.user !== 'object' ? { id: 2, username: 'anonymous', roles: [{ id: 3, name: 'anonymous' }] } : session.user;
 
             return Lawn.format_internal_user(user);
         });
@@ -674,6 +665,7 @@ var Lawn = (function (_super) {
                     message: 'Login successful',
                     user: Lawn.format_internal_user(row)
                 });
+                console.log('sent-login-success', user.username);
             });
         };
 

@@ -27,8 +27,8 @@ var HttpError = (function () {
 
 var Authorization_Error = (function (_super) {
     __extends(Authorization_Error, _super);
-    function Authorization_Error(message) {
-        _super.call(this, message, 403);
+    function Authorization_Error(message, user) {
+        _super.call(this, message, user.username == 'anonymous' ? 401 : 403);
     }
     return Authorization_Error;
 })(HttpError);
@@ -107,7 +107,7 @@ var Irrigation = (function () {
                 result.secure_query(query);
                 return Irrigation.run_query(query, user, vineyard, request);
             } else {
-                throw new Authorization_Error(result.get_message());
+                throw new Authorization_Error(result.get_message(), user);
             }
         });
     };
@@ -155,7 +155,7 @@ var Irrigation = (function () {
             throw new HttpError('The request must have a version property.', 400, 'version-required');
 
         if (user.id == 2)
-            throw new HttpError('Anonymous cannot create content.', 403);
+            throw new Authorization_Error('Anonymous cannot create content.', user);
 
         var updates = request.objects.map(function (object) {
             return ground.create_update(object.trellis, object, user);
@@ -173,7 +173,7 @@ var Irrigation = (function () {
                     };
                 });
             } else {
-                throw new Authorization_Error(result.get_message());
+                throw new Authorization_Error(result.get_message(), user);
             }
         });
     };
@@ -416,7 +416,7 @@ var Lawn = (function (_super) {
                     throw new HttpError('Invalid username or password.', 400);
 
                 if (user.status === 0)
-                    throw new HttpError('This account has been disabled.', 403);
+                    throw new Authorization_Error('This account has been disabled.', user);
 
                 password = user.new_password;
                 delete user.new_password;
@@ -431,10 +431,10 @@ var Lawn = (function (_super) {
                 throw new HttpError('Invalid login info.', 400);
 
             if (user.status === 0)
-                throw new HttpError('This account has been disabled.', 403);
+                throw new Authorization_Error('This account has been disabled.', user);
 
             if (user.status === 2)
-                throw new HttpError('This account is awaiting email verification.', 403);
+                throw new Authorization_Error('This account is awaiting email verification.', user);
 
             var roles_sql = 'SELECT * FROM roles' + '\nJOIN roles_users ON roles.id = roles_users.role' + '\nWHERE user = ?';
             return _this.ground.db.query(roles_sql, [user.id]).then(function (roles) {
@@ -633,7 +633,7 @@ var Lawn = (function (_super) {
             var fortress = this.vineyard.bulbs.fortress;
             var access = authorization(user, fortress);
             if (!access)
-                throw new Authorization_Error('Unauthorized');
+                throw new Authorization_Error('Unauthorized', user);
         }
 
         if (validation) {
@@ -654,8 +654,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.send_http_login_success = function (req, res, user, query_arguments) {
-        var _this = this;
         if (typeof query_arguments === "undefined") { query_arguments = null; }
+        var _this = this;
         var query = this.ground.create_query('user');
         query.add_key_filter(user.id);
         var run_query = function () {
@@ -684,7 +684,7 @@ var Lawn = (function (_super) {
                 } else {
                     var sql = "DELETE FROM sessions WHERE user = ? AND token = ?";
                     return _this.ground.db.query(sql, [user.id, req.sessionID]).then(function () {
-                        throw new Authorization_Error(result.get_message());
+                        throw new Authorization_Error(result.get_message(), user);
                     });
                 }
             });
@@ -1020,8 +1020,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.listen_user_http = function (path, action, method) {
-        var _this = this;
         if (typeof method === "undefined") { method = 'post'; }
+        var _this = this;
         this.app[method](path, function (req, res) {
             //        console.log('server recieved query request.')
             _this.process_user_http(req, res, action);
@@ -1029,8 +1029,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.start_sockets = function (port) {
-        var _this = this;
         if (typeof port === "undefined") { port = null; }
+        var _this = this;
         var socket_io = require('socket.io');
         port = port || this.config.ports.websocket;
         console.log('Starting Socket.IO on port ' + port);
@@ -1086,7 +1086,7 @@ var Lawn = (function (_super) {
                 if (result.access)
                     res.sendfile(filepath);
                 else
-                    throw new HttpError('Access Denied', 403);
+                    throw new Authorization_Error('Access Denied', user);
             });
         });
     };
@@ -1436,8 +1436,8 @@ var Lawn;
         };
 
         Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
-            var _this = this;
             if (typeof store === "undefined") { store = true; }
+            var _this = this;
             var ground = this.lawn.ground;
             var users = users.map(function (x) {
                 return typeof x == 'object' ? x.id : x;
@@ -1568,17 +1568,6 @@ var Lawn;
 })(Lawn || (Lawn = {}));
 Lawn.HttpError = HttpError;
 Lawn.Irrigation = Irrigation;
-/**
-* User: Chris Johnson
-* Date: 11/9/2014
-*/
-/// <reference path="../../vineyard/vineyard.d.ts"/>
-///<reference path="../defs/socket.io.extension.d.ts"/>
-///<reference path="../defs/express.d.ts"/>
-/// <reference path="common.ts"/>
-/// <reference path="gardener.ts"/>
-/// <reference path="irrigation.ts"/>
-/// <reference path="lawn.ts"/>
 /**
 * User: Chris Johnson
 * Date: 11/9/2014

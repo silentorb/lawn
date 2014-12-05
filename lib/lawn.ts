@@ -248,7 +248,7 @@ class Lawn extends Vineyard.Bulb {
 							throw new HttpError('Invalid username or password.', 400)
 
 						if (user.status === 0)
-							throw new HttpError('This account has been disabled.', 403)
+							throw new Authorization_Error('This account has been disabled.', user)
 
 						password = user.new_password
 						delete user.new_password
@@ -264,10 +264,10 @@ class Lawn extends Vineyard.Bulb {
 					throw new HttpError('Invalid login info.', 400)
 
 				if (user.status === 0)
-					throw new HttpError('This account has been disabled.', 403)
+					throw new Authorization_Error('This account has been disabled.', user)
 
 				if (user.status === 2)
-					throw new HttpError('This account is awaiting email verification.', 403)
+					throw new Authorization_Error('This account is awaiting email verification.', user)
 
 				var roles_sql = 'SELECT * FROM roles'
 					+ '\nJOIN roles_users ON roles.id = roles_users.role'
@@ -481,7 +481,7 @@ class Lawn extends Vineyard.Bulb {
 			var fortress = this.vineyard.bulbs.fortress
 			var access = authorization(user, fortress)
 			if (!access)
-				throw new Authorization_Error('Unauthorized')
+				throw new Authorization_Error('Unauthorized', user)
 		}
 
 		if (validation) {
@@ -534,7 +534,7 @@ class Lawn extends Vineyard.Bulb {
 					var sql = "DELETE FROM sessions WHERE user = ? AND token = ?";
 					return this.ground.db.query(sql, [user.id, req.sessionID])
 						.then(()=> {
-							throw new Authorization_Error(result.get_message());
+							throw new Authorization_Error(result.get_message(), user)
 						})
 				}
 			})
@@ -948,7 +948,7 @@ class Lawn extends Vineyard.Bulb {
 						if (result.access)
 							res.sendfile(filepath)
 						else
-							throw new HttpError('Access Denied', 403)
+							throw new Authorization_Error('Access Denied', user)
 					})
 			})
 	}

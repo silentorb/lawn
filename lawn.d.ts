@@ -11,7 +11,7 @@ declare class HttpError {
     constructor(message: string, status?: number, key?: any);
 }
 declare class Authorization_Error extends HttpError {
-    constructor(message: string);
+    constructor(message: string, user: any);
 }
 declare function is_authenticated(user: any, fortress: any): boolean;
 declare function is_admin(user: any, fortress: any): any;

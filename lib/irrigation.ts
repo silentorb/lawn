@@ -27,7 +27,7 @@ class Irrigation {
 					return Irrigation.run_query(query, user, vineyard, request)
 				}
         else {
-          throw new Authorization_Error(result.get_message())
+          throw new Authorization_Error(result.get_message(), user)
         }
       })
   }
@@ -77,7 +77,7 @@ class Irrigation {
       throw new HttpError('The request must have a version property.', 400, 'version-required')
 
     if (user.id == 2)
-      throw new HttpError('Anonymous cannot create content.', 403);
+      throw new Authorization_Error('Anonymous cannot create content.', user);
 
     var updates = request.objects.map((object)=>
         ground.create_update(object.trellis, object, user)
@@ -96,7 +96,7 @@ class Irrigation {
             })
         }
         else {
-          throw new Authorization_Error(result.get_message())
+          throw new Authorization_Error(result.get_message(), user)
         }
       })
   }

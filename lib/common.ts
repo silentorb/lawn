@@ -25,8 +25,8 @@ class HttpError {
 }
 
 class Authorization_Error extends HttpError {
-  constructor(message:string) {
-    super(message, 403)
+  constructor(message:string, user) {
+    super(message, user.username == 'anonymous' ? 401 : 403)
   }
 }
 

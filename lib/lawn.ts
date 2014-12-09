@@ -189,7 +189,7 @@ class Lawn extends Vineyard.Bulb {
 		var id = typeof user == 'object' ? user.id : user
 		var query = this.ground.create_query('user')
 		query.add_key_filter(id)
-		return query.run_single()
+		return query.run_single(null)
 			.then((user)=> Lawn.format_public_user(user))
 	}
 
@@ -207,7 +207,7 @@ class Lawn extends Vineyard.Bulb {
 		query.add_key_filter(token)
 		query.add_subquery('user').add_subquery('roles')
 
-		return query.run_single()
+		return query.run_single(null)
 			.then((session) => {
 				//console.log('session', session)
 				var user = !session || session.token === 0 || typeof session.user !== 'object'
@@ -507,7 +507,7 @@ class Lawn extends Vineyard.Bulb {
 	send_http_login_success(req, res, user, query_arguments = null) {
 		var query = this.ground.create_query('user')
 		query.add_key_filter(user.id)
-		var run_query = ()=> query.run_single()
+		var run_query = ()=> query.run_single(user)
 			.then((row)=> {
 				res.send({
 					token: req.sessionID,
@@ -798,8 +798,11 @@ class Lawn extends Vineyard.Bulb {
 				error = error || {}
 				var status = error.status || 500
 				var message = status == 500 ? 'Server Error' : error.message
-				console.log('public http error:', status || 500, error.message, error.stack)
-				res.status(status || 500).json({message: message})
+        if (status == 500)
+          console.error('public http error:', status, error.message, error.stack || '')
+        else
+				  console.log('public http error:', status, error.message, error.stack || '')
+				res.status(status).json({message: message})
 			})
 	}
 
@@ -1386,7 +1389,7 @@ module Lawn {
 			var query = ground.create_query('notification_target')
 			query.add_filter('recipient', user)
 			query.add_filter('notification', request.notification)
-			return query.run_single()
+			return query.run_single(user)
 				.then((object)=> {
 					if (!object)
 						throw new HttpError('Could not find a notification with that id and target user.', 400)
@@ -1409,7 +1412,7 @@ module Lawn {
 			var query = ground.create_query('notification_target')
 			query.add_filter('recipient', user)
 			query.add_filter('received', false)
-			query.run()
+			query.run(user)
 				.done((objects)=> {
 					for (var i = 0; i < objects.length; ++i) {
 						var notification = objects[i].notification

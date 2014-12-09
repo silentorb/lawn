@@ -102,7 +102,7 @@ var Irrigation = (function () {
 
         var fortress = vineyard.bulbs.fortress;
         return fortress.query_access(user, query).then(function (result) {
-            console.log('fortress', result);
+            //console.log('fortress', result)
             if (result.is_allowed) {
                 result.secure_query(query);
                 return Irrigation.run_query(query, user, vineyard, request);
@@ -114,13 +114,13 @@ var Irrigation = (function () {
 
     Irrigation.run_query = function (query, user, vineyard, request) {
         var lawn = vineyard.bulbs['lawn'];
-        var query_result = { query_count: 0 };
+        var query_result = { query_count: 0, user: user };
         var fortress = vineyard.bulbs.fortress;
         if (request.return_sql === true && (!fortress || fortress.user_has_role(user, 'dev')))
             query_result.return_sql = true;
 
         var start = Date.now();
-        return query.run(query_result).then(function (result) {
+        return query.run(user, query_result).then(function (result) {
             result.query_stats.duration = Math.abs(Date.now() - start);
             if (result.sql && !vineyard.ground.log_queries)
                 console.log('\nservice-query:', "\n" + result.sql);
@@ -368,7 +368,7 @@ var Lawn = (function (_super) {
         var id = typeof user == 'object' ? user.id : user;
         var query = this.ground.create_query('user');
         query.add_key_filter(id);
-        return query.run_single().then(function (user) {
+        return query.run_single(null).then(function (user) {
             return Lawn.format_public_user(user);
         });
     };
@@ -385,7 +385,7 @@ var Lawn = (function (_super) {
         query.add_key_filter(token);
         query.add_subquery('user').add_subquery('roles');
 
-        return query.run_single().then(function (session) {
+        return query.run_single(null).then(function (session) {
             //console.log('session', session)
             var user = !session || session.token === 0 || typeof session.user !== 'object' ? { id: 2, username: 'anonymous', roles: [{ id: 3, name: 'anonymous' }] } : session.user;
 
@@ -659,7 +659,7 @@ var Lawn = (function (_super) {
         var query = this.ground.create_query('user');
         query.add_key_filter(user.id);
         var run_query = function () {
-            return query.run_single().then(function (row) {
+            return query.run_single(user).then(function (row) {
                 res.send({
                     token: req.sessionID,
                     message: 'Login successful',
@@ -934,8 +934,11 @@ var Lawn = (function (_super) {
             error = error || {};
             var status = error.status || 500;
             var message = status == 500 ? 'Server Error' : error.message;
-            console.log('public http error:', status || 500, error.message, error.stack);
-            res.status(status || 500).json({ message: message });
+            if (status == 500)
+                console.error('public http error:', status, error.message, error.stack || '');
+            else
+                console.log('public http error:', status, error.message, error.stack || '');
+            res.status(status).json({ message: message });
         });
     };
 
@@ -1498,7 +1501,7 @@ var Lawn;
             var query = ground.create_query('notification_target');
             query.add_filter('recipient', user);
             query.add_filter('notification', request.notification);
-            return query.run_single().then(function (object) {
+            return query.run_single(user).then(function (object) {
                 if (!object)
                     throw new Lawn.HttpError('Could not find a notification with that id and target user.', 400);
 
@@ -1520,7 +1523,7 @@ var Lawn;
             var query = ground.create_query('notification_target');
             query.add_filter('recipient', user);
             query.add_filter('received', false);
-            query.run().done(function (objects) {
+            query.run(user).done(function (objects) {
                 for (var i = 0; i < objects.length; ++i) {
                     var notification = objects[i].notification;
                     _this.lawn.io.sockets.in('user/' + user.id).emit(notification.event, notification.data);

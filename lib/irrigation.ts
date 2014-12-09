@@ -21,7 +21,7 @@ class Irrigation {
     var fortress = vineyard.bulbs.fortress
     return fortress.query_access(user, query)
       .then((result)=> {
-            console.log('fortress', result)
+            //console.log('fortress', result)
         if (result.is_allowed) {
 					result.secure_query(query)
 					return Irrigation.run_query(query, user, vineyard, request)
@@ -34,13 +34,13 @@ class Irrigation {
 
   static run_query(query:Ground.Query_Builder, user:Vineyard.IUser, vineyard:Vineyard, request:Ground.External_Query_Source):Promise {
     var lawn = vineyard.bulbs['lawn']
-    var query_result:Ground.Query_Result = {query_count: 0}
+    var query_result:Ground.Query_Result = {query_count: 0, user: user}
     var fortress = vineyard.bulbs.fortress
     if (request.return_sql === true && (!fortress || fortress.user_has_role(user, 'dev')))
       query_result.return_sql = true;
 
     var start = Date.now()
-    return query.run(query_result)
+    return query.run(user, query_result)
       .then((result)=> {
         result.query_stats.duration = Math.abs(Date.now() - start)
         if (result.sql && !vineyard.ground.log_queries)

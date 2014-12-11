@@ -654,8 +654,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.send_http_login_success = function (req, res, user, query_arguments) {
-        if (typeof query_arguments === "undefined") { query_arguments = null; }
         var _this = this;
+        if (typeof query_arguments === "undefined") { query_arguments = null; }
         var query = this.ground.create_query('user');
         query.add_key_filter(user.id);
         var run_query = function () {
@@ -1023,8 +1023,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.listen_user_http = function (path, action, method) {
-        if (typeof method === "undefined") { method = 'post'; }
         var _this = this;
+        if (typeof method === "undefined") { method = 'post'; }
         this.app[method](path, function (req, res) {
             //        console.log('server recieved query request.')
             _this.process_user_http(req, res, action);
@@ -1032,8 +1032,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.start_sockets = function (port) {
-        if (typeof port === "undefined") { port = null; }
         var _this = this;
+        if (typeof port === "undefined") { port = null; }
         var socket_io = require('socket.io');
         port = port || this.config.ports.websocket;
         console.log('Starting Socket.IO on port ' + port);
@@ -1172,7 +1172,7 @@ var Lawn = (function (_super) {
 
         for (var i in this.services) {
             var service = this.services[i];
-            if (service.socket_path)
+            if (service.http_path)
                 this.create_service(service);
         }
 
@@ -1439,8 +1439,8 @@ var Lawn;
         };
 
         Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
-            if (typeof store === "undefined") { store = true; }
             var _this = this;
+            if (typeof store === "undefined") { store = true; }
             var ground = this.lawn.ground;
             var users = users.map(function (x) {
                 return typeof x == 'object' ? x.id : x;
@@ -1571,6 +1571,17 @@ var Lawn;
 })(Lawn || (Lawn = {}));
 Lawn.HttpError = HttpError;
 Lawn.Irrigation = Irrigation;
+/**
+* User: Chris Johnson
+* Date: 11/9/2014
+*/
+/// <reference path="../../vineyard/vineyard.d.ts"/>
+///<reference path="../defs/socket.io.extension.d.ts"/>
+///<reference path="../defs/express.d.ts"/>
+/// <reference path="common.ts"/>
+/// <reference path="gardener.ts"/>
+/// <reference path="irrigation.ts"/>
+/// <reference path="lawn.ts"/>
 /**
 * User: Chris Johnson
 * Date: 11/9/2014

@@ -1025,7 +1025,7 @@ class Lawn extends Vineyard.Bulb {
 
 		for (var i in this.services) {
 			var service = this.services[i]
-			if (service.socket_path)
+			if (service.http_path)
 				this.create_service(service)
 		}
 

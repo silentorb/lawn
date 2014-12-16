@@ -85,7 +85,7 @@ declare class Lawn extends Vineyard.Bulb {
     static create_session(user: any, req: any, ground: any): Promise;
     public add_service(definition: Service_Definition): void;
     private create_service(service);
-    private run_service(service, body, user);
+    private run_service(service, body, user, req);
     private create_socket_service(socket, user, service);
     public check_service(data: any, user: any, authorization: (user: any, fortress: any) => any, validation: string): Promise;
     public send_http_login_success(req: any, res: any, user: any, query_arguments?: any): any;

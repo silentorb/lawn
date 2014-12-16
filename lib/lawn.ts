@@ -418,10 +418,11 @@ class Lawn extends Vineyard.Bulb {
 	}
 
 	private create_service(service:Service_Definition) {
-		if (service.http_path[0] != '/')
-			service.http_path = '/' + service.http_path
+    var http_path = service.http_path[0] != '/'
+      ?  '/' + service.http_path
+      : service.http_path
 
-		this.app.post(service.http_path, (req, res)=> {
+		this.app.post(http_path, (req, res)=> {
 				var user = null
 				// Start with a promise so all possible errors (short of one inside when.js) are
 				// handled through promise rejections.  Otherwise we would need a try/catch here
@@ -430,7 +431,7 @@ class Lawn extends Vineyard.Bulb {
 					.then(()=> this.get_user_from_session(req.sessionID))
 					.then((u)=> {
 						user = u
-						return this.run_service(service, req.body, user)
+						return this.run_service(service, req.body, user, req)
 					})
 					.done((response)=> {
 						res.send(response)
@@ -444,17 +445,17 @@ class Lawn extends Vineyard.Bulb {
 		)
 	}
 
-	private run_service(service, body, user):Promise {
+	private run_service(service, body, user, req):Promise {
 		var pipeline:any = require('when/pipeline')
 		return pipeline([
 			()=> this.check_service(body, user, service.authorization, service.validation),
-			()=> service.action(body, user)
+			()=> service.action(body, user, req)
 		])
 	}
 
 	private create_socket_service(socket, user, service:Service_Definition) {
 		socket.on(service.socket_path, (body, callback)=>
-				this.run_service(service, body, user)
+				this.run_service(service, body, user, null)
 					.done((response)=> {
 						if (callback)
 							callback(response)

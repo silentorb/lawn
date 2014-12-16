@@ -566,10 +566,9 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.create_service = function (service) {
         var _this = this;
-        if (service.http_path[0] != '/')
-            service.http_path = '/' + service.http_path;
+        var http_path = service.http_path[0] != '/' ? '/' + service.http_path : service.http_path;
 
-        this.app.post(service.http_path, function (req, res) {
+        this.app.post(http_path, function (req, res) {
             var user = null;
 
             // Start with a promise so all possible errors (short of one inside when.js) are
@@ -579,7 +578,7 @@ var Lawn = (function (_super) {
                 return _this.get_user_from_session(req.sessionID);
             }).then(function (u) {
                 user = u;
-                return _this.run_service(service, req.body, user);
+                return _this.run_service(service, req.body, user, req);
             }).done(function (response) {
                 res.send(response);
             }, function (error) {
@@ -591,7 +590,7 @@ var Lawn = (function (_super) {
         });
     };
 
-    Lawn.prototype.run_service = function (service, body, user) {
+    Lawn.prototype.run_service = function (service, body, user, req) {
         var _this = this;
         var pipeline = require('when/pipeline');
         return pipeline([
@@ -599,7 +598,7 @@ var Lawn = (function (_super) {
                 return _this.check_service(body, user, service.authorization, service.validation);
             },
             function () {
-                return service.action(body, user);
+                return service.action(body, user, req);
             }
         ]);
     };
@@ -607,7 +606,7 @@ var Lawn = (function (_super) {
     Lawn.prototype.create_socket_service = function (socket, user, service) {
         var _this = this;
         socket.on(service.socket_path, function (body, callback) {
-            return _this.run_service(service, body, user).done(function (response) {
+            return _this.run_service(service, body, user, null).done(function (response) {
                 if (callback)
                     callback(response);
             }, function (error) {
@@ -654,8 +653,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.send_http_login_success = function (req, res, user, query_arguments) {
-        var _this = this;
         if (typeof query_arguments === "undefined") { query_arguments = null; }
+        var _this = this;
         var query = this.ground.create_query('user');
         query.add_key_filter(user.id);
         var run_query = function () {
@@ -1023,8 +1022,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.listen_user_http = function (path, action, method) {
-        var _this = this;
         if (typeof method === "undefined") { method = 'post'; }
+        var _this = this;
         this.app[method](path, function (req, res) {
             //        console.log('server recieved query request.')
             _this.process_user_http(req, res, action);
@@ -1032,8 +1031,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.start_sockets = function (port) {
-        var _this = this;
         if (typeof port === "undefined") { port = null; }
+        var _this = this;
         var socket_io = require('socket.io');
         port = port || this.config.ports.websocket;
         console.log('Starting Socket.IO on port ' + port);
@@ -1439,8 +1438,8 @@ var Lawn;
         };
 
         Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
-            var _this = this;
             if (typeof store === "undefined") { store = true; }
+            var _this = this;
             var ground = this.lawn.ground;
             var users = users.map(function (x) {
                 return typeof x == 'object' ? x.id : x;
@@ -1571,17 +1570,6 @@ var Lawn;
 })(Lawn || (Lawn = {}));
 Lawn.HttpError = HttpError;
 Lawn.Irrigation = Irrigation;
-/**
-* User: Chris Johnson
-* Date: 11/9/2014
-*/
-/// <reference path="../../vineyard/vineyard.d.ts"/>
-///<reference path="../defs/socket.io.extension.d.ts"/>
-///<reference path="../defs/express.d.ts"/>
-/// <reference path="common.ts"/>
-/// <reference path="gardener.ts"/>
-/// <reference path="irrigation.ts"/>
-/// <reference path="lawn.ts"/>
 /**
 * User: Chris Johnson
 * Date: 11/9/2014

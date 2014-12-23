@@ -78,11 +78,13 @@ class Lawn extends Vineyard.Bulb {
 	}
 
 	emit_to_users(users, name, data):Promise {
-		return this.vineyard.bulbs.songbird.notify(users, name, data)
+		throw new Error("Lawn.emit_to_users was removed.")
+		//return this.vineyard.bulbs.songbird.notify(users, name, data)
 	}
 
-	notify(users, name, data, trellis_name:string):Promise {
-		return this.vineyard.bulbs.songbird.notify(users, name, data, trellis_name)
+	notify(user, name, data, trellis_name:string):Promise {
+		console.warn("Lawn.notify() is deprecated.  Use Songbird.notify() instead.")
+		return this.vineyard.bulbs.songbird.notify(user, name, data, trellis_name)
 	}
 
 	get_user_sockets(id:number):Socket[] {

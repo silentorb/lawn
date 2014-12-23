@@ -263,11 +263,13 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.emit_to_users = function (users, name, data) {
-        return this.vineyard.bulbs.songbird.notify(users, name, data);
+        throw new Error("Lawn.emit_to_users was removed.");
+        //return this.vineyard.bulbs.songbird.notify(users, name, data)
     };
 
-    Lawn.prototype.notify = function (users, name, data, trellis_name) {
-        return this.vineyard.bulbs.songbird.notify(users, name, data, trellis_name);
+    Lawn.prototype.notify = function (user, name, data, trellis_name) {
+        console.warn("Lawn.notify() is deprecated.  Use Songbird.notify() instead.");
+        return this.vineyard.bulbs.songbird.notify(user, name, data, trellis_name);
     };
 
     Lawn.prototype.get_user_sockets = function (id) {

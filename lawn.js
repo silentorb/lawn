@@ -653,8 +653,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.send_http_login_success = function (req, res, user, query_arguments) {
-        if (typeof query_arguments === "undefined") { query_arguments = null; }
         var _this = this;
+        if (typeof query_arguments === "undefined") { query_arguments = null; }
         var query = this.ground.create_query('user');
         query.add_key_filter(user.id);
         var run_query = function () {
@@ -1022,8 +1022,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.listen_user_http = function (path, action, method) {
-        if (typeof method === "undefined") { method = 'post'; }
         var _this = this;
+        if (typeof method === "undefined") { method = 'post'; }
         this.app[method](path, function (req, res) {
             //        console.log('server recieved query request.')
             _this.process_user_http(req, res, action);
@@ -1031,8 +1031,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.start_sockets = function (port) {
-        if (typeof port === "undefined") { port = null; }
         var _this = this;
+        if (typeof port === "undefined") { port = null; }
         var socket_io = require('socket.io');
         port = port || this.config.ports.websocket;
         console.log('Starting Socket.IO on port ' + port);
@@ -1105,6 +1105,11 @@ var Lawn = (function (_super) {
         var _this = this;
         if (!port)
             return;
+
+        if (typeof this.config.max_connections == 'number') {
+            var http = require('http');
+            http.globalAgent.maxSockets = this.config.max_connections;
+        }
 
         var express = require('express');
         var app = this.app = express();
@@ -1438,10 +1443,10 @@ var Lawn;
         };
 
         Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
-            if (typeof store === "undefined") { store = true; }
             var _this = this;
+            if (typeof store === "undefined") { store = true; }
             var ground = this.lawn.ground;
-            var users = users.map(function (x) {
+            var ids = users.map(function (x) {
                 return typeof x == 'object' ? x.id : x;
             });
             var message;
@@ -1450,27 +1455,29 @@ var Lawn;
                 if (!this.lawn.io)
                     return when.resolve();
 
-                var promises = [];
-                for (var i = 0; i < users.length; ++i) {
-                    var id = users[i];
-                    console.log('sending-message', name, id, data);
-                    var online = this.lawn.user_is_online(id);
-                    console.log('online', online);
-                    this.lawn.io.sockets.in('user/' + id).emit(name, data);
-                    if (!online) {
-                        console.log('fallback count', this.fallback_bulbs.length);
-                        message = this.format_message(name, data);
-                        for (var x = 0; x < this.fallback_bulbs.length; ++x) {
-                            promises.push(this.fallback_bulbs[x].send({ id: id }, message, data, 0));
-                        }
-                    }
-                }
-                return when.all(promises);
+                return this.push_notification(ids, data);
+                //var sql = ""
+                //return this.ground.db.query()
+                //var promises = []
+                //for (var i = 0; i < ids.length; ++i) {
+                //	var id = ids[i]
+                //	console.log('sending-message', name, id, data)
+                //	var online = this.lawn.user_is_online(id)
+                //	console.log('online', online)
+                //	this.lawn.io.sockets.in('user/' + id).emit(name, data)
+                //	if (!online) {
+                //		message = this.format_message(name, data)
+                //		for (var x = 0; x < this.fallback_bulbs.length; ++x) {
+                //			promises.push(this.fallback_bulbs[x].send({id: id}, message, data, 0))
+                //		}
+                //	}
+                //}
+                //return when.all(promises)
             }
 
             data.event = name;
             return ground.create_update(trellis_name, data, this.lawn.config.admin).run().then(function (notification) {
-                var promises = users.map(function (id) {
+                return when.all(ids.map(function (id) {
                     console.log('sending-message', name, id, data);
 
                     var online = _this.lawn.user_is_online(id);
@@ -1479,19 +1486,31 @@ var Lawn;
                         notification: notification.id,
                         recipient: id,
                         received: online
-                    }, _this.lawn.config.admin).run().then(function () {
-                        _this.lawn.io.sockets.in('user/' + id).emit(name, data);
-                        if (online)
-                            return when.resolve();
-
-                        message = _this.format_message(name, data);
-                        return when.all(_this.fallback_bulbs.map(function (b) {
-                            return b.send({ id: id }, message, data, 0);
-                        }));
-                    });
+                    }, _this.lawn.config.admin).run();
+                })).then(function () {
+                    return _this.push_notification(ids, data);
                 });
+            });
+        };
 
-                return when.all(promises);
+        Songbird.prototype.push_notification = function (ids, data) {
+            var _this = this;
+            ids = ids.filter(function (id) {
+                return typeof id == 'number';
+            });
+            var sql = "SELECT users.id, COUNT(targets.id) AS badge FROM users" + "\nJOIN notification_targets targets" + "\nON targets.user = users.id AND targets.viewed = 0" + "\nWHERE id IN (" + ids.join(', ') + " )";
+
+            return this.ground.db.query(sql).then(function (users) {
+                return users.map(function (user) {
+                    _this.lawn.io.sockets.in('user/' + user.id).emit(name, data);
+                    if (_this.lawn.user_is_online(user.id))
+                        return when.resolve();
+
+                    var message = _this.format_message(name, data);
+                    return when.all(_this.fallback_bulbs.map(function (b) {
+                        return b.send({ id: user.id }, message, data, user.badge);
+                    }));
+                });
             });
         };
 
@@ -1570,6 +1589,17 @@ var Lawn;
 })(Lawn || (Lawn = {}));
 Lawn.HttpError = HttpError;
 Lawn.Irrigation = Irrigation;
+/**
+* User: Chris Johnson
+* Date: 11/9/2014
+*/
+/// <reference path="../../vineyard/vineyard.d.ts"/>
+///<reference path="../defs/socket.io.extension.d.ts"/>
+///<reference path="../defs/express.d.ts"/>
+/// <reference path="common.ts"/>
+/// <reference path="gardener.ts"/>
+/// <reference path="irrigation.ts"/>
+/// <reference path="lawn.ts"/>
 /**
 * User: Chris Johnson
 * Date: 11/9/2014

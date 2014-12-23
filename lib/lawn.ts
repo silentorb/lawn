@@ -87,7 +87,7 @@ class Lawn extends Vineyard.Bulb {
 
 	get_user_sockets(id:number):Socket[] {
 		return MetaHub.map_to_array(this.instance_user_sockets[id], (x)=> x)
-		|| []
+			|| []
 	}
 
 	initialize_session(socket, user) {
@@ -292,9 +292,9 @@ class Lawn extends Vineyard.Bulb {
 
 	is_configured_for_password_reset():boolean {
 		return this.config.site
-		&& this.config.site.name
-		&& this.mail
-		&& typeof this.password_reset_template == 'string'
+			&& this.config.site.name
+			&& this.mail
+			&& typeof this.password_reset_template == 'string'
 	}
 
 	check_password_reset_configuration(req, res, body):Promise {
@@ -418,9 +418,9 @@ class Lawn extends Vineyard.Bulb {
 	}
 
 	private create_service(service:Service_Definition) {
-    var http_path = service.http_path[0] != '/'
-      ?  '/' + service.http_path
-      : service.http_path
+		var http_path = service.http_path[0] != '/'
+			? '/' + service.http_path
+			: service.http_path
 
 		this.app.post(http_path, (req, res)=> {
 				var user = null
@@ -799,10 +799,10 @@ class Lawn extends Vineyard.Bulb {
 				error = error || {}
 				var status = error.status || 500
 				var message = status == 500 ? 'Server Error' : error.message
-        if (status == 500)
-          console.error('public http error:', status, error.message, error.stack || '')
-        else
-				  console.log('public http error:', status, error.message, error.stack || '')
+				if (status == 500)
+					console.error('public http error:', status, error.message, error.stack || '')
+				else
+					console.log('public http error:', status, error.message, error.stack || '')
 				res.status(status).json({message: message})
 			})
 	}
@@ -969,6 +969,11 @@ class Lawn extends Vineyard.Bulb {
 	start_http(port) {
 		if (!port)
 			return
+
+		if (typeof this.config.max_connections == 'number') {
+			var http = require('http')
+			http.globalAgent.maxSockets = this.config.max_connections
+		}
 
 		var express = require('express');
 		var app = this.app = express();
@@ -1179,7 +1184,8 @@ module Lawn {
 		valid_display_name?
 		valid_password?
 		allow_cors?:boolean
-		allow_register?: boolean
+		allow_register?:boolean
+		max_connections?:number
 	}
 
 	export class Facebook extends Vineyard.Bulb {
@@ -1333,35 +1339,38 @@ module Lawn {
 
 		notify(users, name, data, trellis_name:string, store = true):Promise {
 			var ground = this.lawn.ground
-			var users = users.map((x)=> typeof x == 'object' ? x.id : x)
+			var ids = users.map((x)=> typeof x == 'object' ? x.id : x)
 			var message
 
 			if (!store || !trellis_name) {
 				if (!this.lawn.io)
 					return when.resolve()
 
-				var promises = []
-				for (var i = 0; i < users.length; ++i) {
-					var id = users[i]
-					console.log('sending-message', name, id, data)
-					var online = this.lawn.user_is_online(id)
-					console.log('online', online)
-					this.lawn.io.sockets.in('user/' + id).emit(name, data)
-					if (!online) {
-						console.log('fallback count', this.fallback_bulbs.length)
-						message = this.format_message(name, data)
-						for (var x = 0; x < this.fallback_bulbs.length; ++x) {
-							promises.push(this.fallback_bulbs[x].send({id: id}, message, data, 0))
-						}
-					}
-				}
-				return when.all(promises)
+				return this.push_notification(ids, data)
+
+				//var sql = ""
+				//return this.ground.db.query()
+				//var promises = []
+				//for (var i = 0; i < ids.length; ++i) {
+				//	var id = ids[i]
+				//	console.log('sending-message', name, id, data)
+				//	var online = this.lawn.user_is_online(id)
+				//	console.log('online', online)
+				//	this.lawn.io.sockets.in('user/' + id).emit(name, data)
+				//	if (!online) {
+				//		message = this.format_message(name, data)
+				//		for (var x = 0; x < this.fallback_bulbs.length; ++x) {
+				//			promises.push(this.fallback_bulbs[x].send({id: id}, message, data, 0))
+				//		}
+				//	}
+				//}
+				//return when.all(promises)
 			}
 
 			data.event = name
 			return ground.create_update(trellis_name, data, this.lawn.config.admin).run()
 				.then((notification)=> {
-					var promises = users.map((id)=> {
+					return when.all(ids.map((id)=> {
 						console.log('sending-message', name, id, data)
 
 						var online = this.lawn.user_is_online(id)
@@ -1371,18 +1380,28 @@ module Lawn {
 							recipient: id,
 							received: online
 						}, this.lawn.config.admin).run()
-							.then(()=> {
-								this.lawn.io.sockets.in('user/' + id).emit(name, data)
-								if (online)
-									return when.resolve()
-
-								message = this.format_message(name, data)
-								return when.all(this.fallback_bulbs.map((b)=> b.send({id: id}, message, data, 0)))
-							})
-					})
-
-					return when.all(promises)
+					}))
+						.then(()=> this.push_notification(ids, data))
 				})
+		}
+
+		private push_notification(ids, data) {
+			ids = ids.filter((id)=> typeof id == 'number')
+			var sql = "SELECT users.id, COUNT(targets.id) AS badge FROM users"
+				+ "\nJOIN notification_targets targets"
+				+ "\nON targets.user = users.id AND targets.viewed = 0"
+				+ "\nWHERE id IN (" + ids.join(', ') + " )"
+
+			return this.ground.db.query(sql)
+				.then((users)=> users.map((user)=> {
+					this.lawn.io.sockets.in('user/' + user.id).emit(name, data)
+					if (this.lawn.user_is_online(user.id))
+						return when.resolve()
+
+					var message = this.format_message(name, data)
+					return when.all(this.fallback_bulbs.map((b)=> b.send({id: user.id}, message, data, user.badge)))
+				})
+			)
 		}
 
 		notification_receieved(user, request):Promise {

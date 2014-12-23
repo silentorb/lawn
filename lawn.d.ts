@@ -150,6 +150,7 @@ declare module Lawn {
         valid_password?: any;
         allow_cors?: boolean;
         allow_register?: boolean;
+        max_connections?: number;
     }
     class Facebook extends Vineyard.Bulb {
         public lawn: Lawn;
@@ -171,6 +172,7 @@ declare module Lawn {
         public add_fallback(fallback: any): void;
         public format_message(name: any, data: any): string;
         public notify(users: any, name: any, data: any, trellis_name: string, store?: boolean): Promise;
+        private push_notification(ids, data);
         public notification_receieved(user: any, request: any): Promise;
         public send_pending_notifications(user: any): void;
     }

@@ -906,7 +906,7 @@ class Lawn extends Vineyard.Bulb {
 		console.log('Starting Socket.IO on port ' + port)
 
 		var io = this.io = socket_io.listen(port)
-		io.set('log level', 1);
+		io.set('log level', process.argv.indexOf('--monitor-sockets') > -1 ? 3 : 1);
 		io.server.on('error', (e)=> {
 			if (e.code == 'EADDRINUSE') {
 				console.log('Port in use: ' + port + '.')

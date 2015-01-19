@@ -709,6 +709,8 @@ var Lawn = (function (_super) {
         var _this = this;
         var body = req.body, username = body.username, email = body.email, password = body.password, phone = body.phone, facebook_token = body.facebook_token, display_name = body[this.config.display_name_key];
 
+        console.log('register', body);
+
         if (typeof username != 'string' || username.length > 32 || !username.match(this.config.valid_username))
             return when.reject(new HttpError('Invalid username.', 400));
 

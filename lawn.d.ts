@@ -160,22 +160,6 @@ declare module Lawn {
         public get_user(body: any): Promise;
         public get_user_facebook_id(body: any): Promise;
     }
-    interface Songbird_Method {
-        send: (user: any, message: string, data: any, badge: any) => Promise;
-    }
-    class Songbird extends Vineyard.Bulb {
-        public lawn: Lawn;
-        public fallback_bulbs: Songbird_Method[];
-        public templates: any;
-        public grow(): void;
-        public initialize_socket(socket: any, user: any): void;
-        public add_fallback(fallback: any): void;
-        public format_message(name: any, data: any): string;
-        public notify(users: any, name: any, data: any, trellis_name: string, store?: boolean): Promise;
-        private push_notification(ids, data);
-        public notification_receieved(user: any, request: any): Promise;
-        public send_pending_notifications(user: any): void;
-    }
     class Mail {
         public transporter: any;
         public config: Mail_Config;

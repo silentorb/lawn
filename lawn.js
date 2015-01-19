@@ -219,6 +219,15 @@ var Lawn = (function (_super) {
     Lawn.prototype.grow = function () {
         var _this = this;
         var ground = this.ground;
+
+        // Lawn requires vineyard-user whether or not it was included in the site config files.
+        var user_bulb = this.vineyard.bulbs['user'];
+        if (!user_bulb) {
+            user_bulb = this.vineyard.load_bulb('user', {
+                path: require('path').resolve(__dirname, 'node_modules/vineyard-user')
+            });
+        }
+
         this.config.display_name_key = this.config.display_name_key || 'display_name';
 
         if (this.config.log_updates) {
@@ -400,8 +409,10 @@ var Lawn = (function (_super) {
         if (typeof body.facebook_token === 'string')
             return this.vineyard.bulbs.facebook.login(req, res, body);
 
+        var user_bulb = this.vineyard.bulbs['user'];
+
         var username = body.username || body.name;
-        var password = body.password || body.pass;
+        var password = user_bulb.prepare_password(body.password || body.pass);
 
         var sql = "SELECT id, " + this.config.display_name_key + ", status FROM users WHERE username = ? AND password = ?";
 
@@ -704,8 +715,10 @@ var Lawn = (function (_super) {
         if (email && (!email.match(/\S+@\S+\.\S/) || email.match(/['"]/)))
             return when.reject(new HttpError('Invalid email address.', 400));
 
-        if (typeof password != 'string' || password.length > 32 || !password.match(this.config.valid_password))
-            return when.reject(new HttpError('Invalid password.', 400));
+        if (!facebook_token) {
+            if (typeof password != 'string' || password.length > 32 || !password.match(this.config.valid_password))
+                return when.reject(new HttpError('Invalid password.', 400));
+        }
 
         if (typeof display_name != 'string')
             display_name = null;
@@ -1258,8 +1271,6 @@ var Lawn = (function (_super) {
 
     Lawn.prototype.stop = function () {
         console.log('Stopping Lawn');
-
-        // Socket IO's documentation is a joke.  I had to look on stack overflow for how to close a socket server.
         if (this.io && this.io.server) {
             console.log('Stopping Socket.IO');
             var clients = this.io.sockets.clients();
@@ -1399,160 +1410,6 @@ var Lawn;
         return Facebook;
     })(Vineyard.Bulb);
     Lawn.Facebook = Facebook;
-
-    var Songbird = (function (_super) {
-        __extends(Songbird, _super);
-        function Songbird() {
-            _super.apply(this, arguments);
-            this.fallback_bulbs = [];
-        }
-        Songbird.prototype.grow = function () {
-            var _this = this;
-            this.lawn = this.vineyard.bulbs.lawn;
-            this.listen(this.lawn, 'socket.add', function (socket, user) {
-                return _this.initialize_socket(socket, user);
-            });
-            if (this.config.template_file) {
-                var fs = require('fs');
-                var json = fs.readFileSync(this.config.template_file, 'ascii');
-                this.templates = JSON.parse(json);
-            }
-        };
-
-        Songbird.prototype.initialize_socket = function (socket, user) {
-            var _this = this;
-            this.lawn.on_socket(socket, 'notification/received', user, function (request) {
-                return _this.notification_receieved(user, request);
-            });
-
-            this.lawn.on_socket(socket, 'notification/received', user, function (request) {
-                return _this.send_pending_notifications(user);
-            });
-        };
-
-        Songbird.prototype.add_fallback = function (fallback) {
-            this.fallback_bulbs.push(fallback);
-        };
-
-        Songbird.prototype.format_message = function (name, data) {
-            if (!this.templates)
-                return name;
-
-            if (!this.templates[name])
-                throw new Error("Could not find a message template for " + name + ".");
-
-            return this.templates[name].join("");
-        };
-
-        Songbird.prototype.notify = function (users, name, data, trellis_name, store) {
-            var _this = this;
-            if (typeof store === "undefined") { store = true; }
-            var ground = this.lawn.ground;
-            var ids = users.map(function (x) {
-                return typeof x == 'object' ? x.id : x;
-            });
-            var message;
-
-            if (!store || !trellis_name) {
-                if (!this.lawn.io)
-                    return when.resolve();
-
-                return this.push_notification(ids, data);
-                //var sql = ""
-                //return this.ground.db.query()
-                //var promises = []
-                //for (var i = 0; i < ids.length; ++i) {
-                //	var id = ids[i]
-                //	console.log('sending-message', name, id, data)
-                //	var online = this.lawn.user_is_online(id)
-                //	console.log('online', online)
-                //	this.lawn.io.sockets.in('user/' + id).emit(name, data)
-                //	if (!online) {
-                //		message = this.format_message(name, data)
-                //		for (var x = 0; x < this.fallback_bulbs.length; ++x) {
-                //			promises.push(this.fallback_bulbs[x].send({id: id}, message, data, 0))
-                //		}
-                //	}
-                //}
-                //return when.all(promises)
-            }
-
-            data.event = name;
-            return ground.create_update(trellis_name, data, this.lawn.config.admin).run().then(function (notification) {
-                return when.all(ids.map(function (id) {
-                    console.log('sending-message', name, id, data);
-
-                    var online = _this.lawn.user_is_online(id);
-
-                    return ground.create_update('notification_target', {
-                        notification: notification.id,
-                        recipient: id,
-                        received: online
-                    }, _this.lawn.config.admin).run();
-                })).then(function () {
-                    return _this.push_notification(ids, data);
-                });
-            });
-        };
-
-        Songbird.prototype.push_notification = function (ids, data) {
-            var _this = this;
-            ids = ids.filter(function (id) {
-                return typeof id == 'number';
-            });
-            var sql = "SELECT users.id, COUNT(targets.id) AS badge FROM users" + "\nJOIN notification_targets targets" + "\nON targets.user = users.id AND targets.viewed = 0" + "\nWHERE id IN (" + ids.join(', ') + " )";
-
-            return this.ground.db.query(sql).then(function (users) {
-                return users.map(function (user) {
-                    _this.lawn.io.sockets.in('user/' + user.id).emit(name, data);
-                    if (_this.lawn.user_is_online(user.id))
-                        return when.resolve();
-
-                    var message = _this.format_message(name, data);
-                    return when.all(_this.fallback_bulbs.map(function (b) {
-                        return b.send({ id: user.id }, message, data, user.badge);
-                    }));
-                });
-            });
-        };
-
-        Songbird.prototype.notification_receieved = function (user, request) {
-            var ground = this.lawn.ground;
-            var query = ground.create_query('notification_target');
-            query.add_filter('recipient', user);
-            query.add_filter('notification', request.notification);
-            return query.run_single(user).then(function (object) {
-                if (!object)
-                    throw new Lawn.HttpError('Could not find a notification with that id and target user.', 400);
-
-                if (object.received)
-                    throw new Lawn.HttpError('That notification was already marked as received.', 400);
-
-                return ground.update_object('notification_target', {
-                    id: object.id,
-                    received: true
-                }).then(function (object) {
-                    return { message: "Notification is now marked as received." };
-                });
-            });
-        };
-
-        Songbird.prototype.send_pending_notifications = function (user) {
-            var _this = this;
-            var ground = this.lawn.ground;
-            var query = ground.create_query('notification_target');
-            query.add_filter('recipient', user);
-            query.add_filter('received', false);
-            query.run(user).done(function (objects) {
-                for (var i = 0; i < objects.length; ++i) {
-                    var notification = objects[i].notification;
-                    _this.lawn.io.sockets.in('user/' + user.id).emit(notification.event, notification.data);
-                }
-            });
-        };
-        return Songbird;
-    })(Vineyard.Bulb);
-    Lawn.Songbird = Songbird;
 
     var Mail = (function () {
         function Mail(config) {

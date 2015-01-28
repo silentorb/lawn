@@ -216,6 +216,18 @@ var Lawn = (function (_super) {
         this.password_reset_template = null;
         this.services = [];
     }
+    Lawn.prototype.till_ground = function (ground_config) {
+        var display_name_key = this.config.display_name_key || 'display_name';
+        if (display_name_key == 'display_name') {
+            this.vineyard.add_schema("node_modules/vineyard-lawn/schema/user-new.json");
+        } else {
+            this.vineyard.add_schema("node_modules/vineyard-lawn/schema/user-old.json");
+        }
+
+        this.vineyard.add_schema("node_modules/vineyard-lawn/schema/common.json");
+        this.vineyard.add_schema("node_modules/vineyard-lawn/schema/utility.json");
+    };
+
     Lawn.prototype.grow = function () {
         var _this = this;
         var ground = this.ground;

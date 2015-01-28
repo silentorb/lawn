@@ -60,6 +60,7 @@ declare class Lawn extends Vineyard.Bulb {
     public mail: Lawn.Mail;
     public password_reset_template: string;
     private services;
+    public till_ground(ground_config: Vineyard.Ground_Configuration): void;
     public grow(): void;
     static authorization(handshakeData: any, callback: any): any;
     public emit_to_users(users: any, name: any, data: any): Promise;

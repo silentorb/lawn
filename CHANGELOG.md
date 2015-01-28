@@ -1,5 +1,11 @@
 # Changelog - Vineyard Lawn #
 
+## 0.2.13 ##
+1. Keeping the old Songbird code inside Lawn caused as many problems as I'd hoped to solve so it was removed.
+   That was a short deprecation.
+2. Moved the notification schema out of common.json and into the songbird module.
+3. The Lawn schema files are now automatically loaded and should not be included in configuration files.
+
 ## 0.2.12 ##
 1. Songbird was moved to its own npm module (vineyard-songbird).  The embedded Songbird module is deprecated.
 

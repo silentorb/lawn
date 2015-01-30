@@ -636,8 +636,8 @@ var Lawn = (function (_super) {
                     callback(response);
             }, function (error) {
                 error = error || {};
-                console.log('socket error with path ' + service.socket_path + ':', error.message, error.status, error.stack);
-                console.log(JSON.stringify(body));
+                console.error('socket error with path ' + service.socket_path + ':', error.message, error.status, error.stack);
+                console.error(JSON.stringify(body));
                 var status = error.status || 500;
 
                 var response = {
@@ -921,7 +921,7 @@ var Lawn = (function (_super) {
                 callback(user);
             }
         }, function (error) {
-            console.log('error', error.message, error.stack);
+            console.error('error', error.message, error.stack);
 
             socket.emit('socket login error', {
                 'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
@@ -965,7 +965,7 @@ var Lawn = (function (_super) {
             if (status == 500)
                 console.error('public http error:', status, error.message, error.stack || '');
             else
-                console.log('public http error:', status, error.message, error.stack || '');
+                console.error('public http error:', status, error.message, error.stack || '');
             res.status(status).json({ message: message });
         });
     };
@@ -1443,7 +1443,7 @@ var Lawn;
                 html: text
             }, function (error, info) {
                 if (error) {
-                    console.log('error', error);
+                    console.error('error', error);
                     def.reject(error);
                 } else {
                     def.resolve(info);

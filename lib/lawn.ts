@@ -487,8 +487,8 @@ class Lawn extends Vineyard.Bulb {
 							callback(response)
 					}, (error)=> {
 						error = error || {}
-						console.log('socket error with path ' + service.socket_path + ':', error.message, error.status, error.stack)
-						console.log(JSON.stringify(body))
+						console.error('socket error with path ' + service.socket_path + ':', error.message, error.status, error.stack)
+						console.error(JSON.stringify(body))
 						var status = error.status || 500
 
 						var response = {
@@ -787,7 +787,7 @@ class Lawn extends Vineyard.Bulb {
 				}
 			},
 			(error)=> {
-				console.log('error', error.message, error.stack)
+				console.error('error', error.message, error.stack)
 
 				socket.emit('socket login error', {
 					'message': error.status == 500 || !error.message ? 'Error getting session.' : error.message
@@ -832,7 +832,7 @@ class Lawn extends Vineyard.Bulb {
 				if (status == 500)
 					console.error('public http error:', status, error.message, error.stack || '')
 				else
-					console.log('public http error:', status, error.message, error.stack || '')
+					console.error('public http error:', status, error.message, error.stack || '')
 				res.status(status).json({message: message})
 			})
 	}
@@ -1343,7 +1343,7 @@ module Lawn {
 				html: text
 			}, function (error, info) {
 				if (error) {
-					console.log('error', error)
+					console.error('error', error)
 					def.reject(error)
 				}
 				else {

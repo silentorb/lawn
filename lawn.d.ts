@@ -1,3 +1,4 @@
+/// <reference path="lib/mysql-session.d.ts" />
 /// <reference path="../vineyard/vineyard.d.ts" />
 /// <reference path="defs/socket.io.extension.d.ts" />
 /// <reference path="defs/express.d.ts" />
@@ -36,6 +37,7 @@ declare class Irrigation {
     static update2(request: Update_Request, user: any, lawn: any): Promise;
     static grow(lawn: any): void;
 }
+declare var mysql_session: any;
 interface User_Source {
     name?: string;
     display_name?: string;
@@ -132,6 +134,10 @@ declare module Lawn {
         secret: string;
         db: Session_Store_DB;
     }
+    interface Session_Config {
+        cookie_secret?: string;
+        expires?: number;
+    }
     interface Config {
         ports: any;
         log_updates?: boolean;
@@ -140,7 +146,7 @@ declare module Lawn {
         log_file?: string;
         admin: any;
         file_path?: string;
-        mysql_session_store?: Session_Store_Config;
+        session?: Session_Config;
         mail?: Mail_Config;
         password_reset_template?: string;
         site: any;

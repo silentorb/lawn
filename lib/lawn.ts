@@ -1,5 +1,7 @@
 /// <reference path="references.ts"/>
+/// <reference path="mysql-session.ts"/>
 
+var mysql_session = require('./lib/mysql-session')
 
 interface User_Source {
 	name?:string
@@ -425,18 +427,22 @@ class Lawn extends Vineyard.Bulb {
 			req.connection.remoteAddress ||
 			req.socket.remoteAddress
 
+		req.session.user = user.id
+
 		if (!ip && req.connection.socket)
 			ip = req.connection.socket.remoteAddress
 
-		var session = [
-			user.id,
-			req.sessionID,
-			ip,
-			Math.round(new Date().getTime() / 1000)
-		]
+		//var session = [
+		//	user.id,
+		//	req.sessionID,
+		//	ip,
+		//	Math.round(new Date().getTime() / 1000)
+		//]
 
-		return ground.db.query("REPLACE INTO sessions (user, token, hostname, timestamp) VALUES (?, ?, ?, ?)", session)
-			.then(() => session)
+		return when.resolve()
+		//console.log('session', req.session, req.sessionID, user)
+		//var sql = "UPDATE `sessions` SET user = ?, ip = ? WHERE token = ?"
+		//return ground.db.query(sql, [ user.id, ip, req.sessionID ])
 	}
 
 	add_service(definition:Service_Definition) {
@@ -811,7 +817,7 @@ class Lawn extends Vineyard.Bulb {
 			delete this.instance_sockets[socket.id];
 			if (user && !this.user_is_online(user.id)) {
 				data = user
-				if (this.ground.db.active)
+				if (this.ground.db['active'])
 					return this.ground.db.query('UPDATE users SET online = 0 WHERE id = ' + user.id)
 //        data.online = false;
 //        return Server.notify.send_online_changed(user, false);
@@ -1014,28 +1020,40 @@ class Lawn extends Vineyard.Bulb {
 		app.use(require('cookie-parser')());
 
 		var session:any = require('express-session')
-		if (typeof this.config.mysql_session_store == 'object') {
-			var MySQL_Session_Store = require('express-mysql-session')
-			var storage_config = <Lawn.Session_Store_Config>this.config.mysql_session_store
-
-			console.log('using mysql sessions store: ', storage_config.db)
-
-			app.use(session({
-				key: storage_config.key,
-				secret: storage_config.secret,
-				resave: true,
-				saveUninitialized: true,
-				store: new MySQL_Session_Store(storage_config.db)
-			}))
-		}
-		else {
+		//if (typeof this.config.mysql_session_store == 'object') {
+		//	var MySQL_Session_Store = require('express-mysql-session')
+		//	var storage_config = <Lawn.Session_Store_Config>this.config.mysql_session_store
+		//
+		//	console.log('using mysql sessions store: ', storage_config.db)
+		//
+		//	app.use(session({
+		//		key: storage_config.key,
+		//		secret: storage_config.secret,
+		//		resave: true,
+		//		saveUninitialized: true,
+		//		store: new MySQL_Session_Store(storage_config.db)
+		//	}))
+		//}
+		//else
+		{
 			if (!this.config.cookie_secret)
 				throw new Error('lawn.cookie_secret must be set!')
 
+			//var MySQL_Session_Store = require('express-mysql-session')
+			//var storage_config = <Lawn.Session_Store_Config>this.config.mysql_session_store
+
+			//console.log('using mysql sessions store: ', storage_config.db)
+
 			app.use(session({
 				secret: this.config.cookie_secret, resave: true,
-				saveUninitialized: true
+				saveUninitialized: true,
+				store: new mysql_session(this.ground.db)
 			}))
+
+			//app.use(session({
+			//	secret: this.config.cookie_secret, resave: true,
+			//	saveUninitialized: true
+			//}))
 		}
 
 		if (this.config.allow_cors === true) {
@@ -1193,6 +1211,11 @@ module Lawn {
 		db: Session_Store_DB
 	}
 
+	export interface Session_Config {
+		cookie_secret?:string
+		expires?:number
+	}
+
 	export interface Config {
 		ports
 		log_updates?:boolean
@@ -1201,7 +1224,7 @@ module Lawn {
 		log_file?:string
 		admin
 		file_path?:string
-		mysql_session_store?:Session_Store_Config
+		session?:Session_Config
 		mail?:Mail_Config
 		password_reset_template?:string
 		site

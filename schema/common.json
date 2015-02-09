@@ -108,7 +108,8 @@
         },
         "user": {
           "type": "reference",
-          "trellis": "user"
+          "trellis": "user",
+          "default": 0
         },
         "hostname": {
           "type": "string",
@@ -122,9 +123,12 @@
           "type": "int",
           "allow_null": true
         },
-        "session": {
+        "data": {
           "type": "text",
           "allow_null": true
+        },
+        "expires": {
+          "type": "int"
         }
       }
     },

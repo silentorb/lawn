@@ -250,11 +250,20 @@ var Lawn = (function (_super) {
                 if (update.trellis.name == 'update_log')
                     return when.resolve();
 
-                return _this.ground.insert_object('update_log', {
-                    user: update.user,
-                    data: JSON.stringify(seed),
-                    trellis: update.trellis.name
+                var sql = "INSERT INTO update_logs (`trellis`, `user`, `data`, `created`, `modified`)\n" + "VALUES(?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())";
+
+                when.resolve().then(function () {
+                    return _this.ground.db.query(sql, [
+                        update.trellis.name,
+                        update.user ? update.user.id : 0,
+                        JSON.stringify(seed)
+                    ]);
+                }).done(function () {
+                }, function (error) {
+                    console.error('update_log error', error);
                 });
+
+                return when.resolve();
             });
         }
 

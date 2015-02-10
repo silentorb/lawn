@@ -1,5 +1,11 @@
 # Changelog - Vineyard Lawn #
 
+## 0.2.14 ##
+1. Now Lawn uses db.is_active() so it requires Ground version 0.1.76 or higher.
+2. Created new MySQL session store module specifically for Vineyard and Express.
+3. Changed error logging to use console.error instead of console.log.
+4. Fixed bugs with the update logging so it can be used again.
+
 ## 0.2.13 ##
 1. Keeping the old Songbird code inside Lawn caused as many problems as I'd hoped to solve so it was removed.
    That was a short deprecation.

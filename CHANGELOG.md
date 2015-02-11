@@ -1,5 +1,8 @@
 # Changelog - Vineyard Lawn #
 
+## 0.2.15 ##
+1. Fixed session handling bugs
+
 ## 0.2.14 ##
 1. Now Lawn uses db.is_active() so it requires Ground version 0.1.76 or higher.
 2. Created new MySQL session store module specifically for Vineyard and Express.

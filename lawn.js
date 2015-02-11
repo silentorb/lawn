@@ -421,7 +421,7 @@ var Lawn = (function (_super) {
 
         return query.run_single(null).then(function (session) {
             //console.log('session', session)
-            var user = !session || session.token === 0 || typeof session.user !== 'object' ? { id: 2, username: 'anonymous', roles: [{ id: 3, name: 'anonymous' }] } : session.user;
+            var user = !session || session.token === 0 || typeof session.user !== 'object' || !session.user.id ? { id: 2, username: 'anonymous', roles: [{ id: 3, name: 'anonymous' }] } : session.user;
 
             return Lawn.format_internal_user(user);
         });
@@ -579,7 +579,7 @@ var Lawn = (function (_super) {
     };
 
     Lawn.create_session = function (user, req, ground) {
-        var ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.socket.remoteAddress;
+        var ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress;
 
         req.session.user = user.id;
 
@@ -1162,24 +1162,19 @@ var Lawn = (function (_super) {
         app.use(require('cookie-parser')());
 
         var session = require('express-session');
+        if (!this.config.cookie_secret)
+            throw new Error('lawn.cookie_secret must be set!');
 
-         {
-            if (!this.config.cookie_secret)
-                throw new Error('lawn.cookie_secret must be set!');
+        app.use(session({
+            secret: this.config.cookie_secret, resave: true,
+            saveUninitialized: true,
+            store: new mysql_session(this.ground.db)
+        }));
 
-            //var MySQL_Session_Store = require('express-mysql-session')
-            //var storage_config = <Lawn.Session_Store_Config>this.config.mysql_session_store
-            //console.log('using mysql sessions store: ', storage_config.db)
-            app.use(session({
-                secret: this.config.cookie_secret, resave: true,
-                saveUninitialized: true,
-                store: new mysql_session(this.ground.db)
-            }));
-            //app.use(session({
-            //	secret: this.config.cookie_secret, resave: true,
-            //	saveUninitialized: true
-            //}))
-        }
+        app.use(function (req, res, next) {
+            req.session.ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress;
+            next();
+        });
 
         if (this.config.allow_cors === true) {
             app.use(require('cors')());

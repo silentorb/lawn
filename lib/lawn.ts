@@ -246,7 +246,7 @@ class Lawn extends Vineyard.Bulb {
 		return query.run_single(null)
 			.then((session) => {
 				//console.log('session', session)
-				var user = !session || session.token === 0 || typeof session.user !== 'object'
+				var user = !session || session.token === 0 || typeof session.user !== 'object' || !session.user.id
 					? {id: 2, username: 'anonymous', roles: [{id: 3, name: 'anonymous'}]}
 					: session.user
 
@@ -435,7 +435,7 @@ class Lawn extends Vineyard.Bulb {
 	static create_session(user, req, ground):Promise {
 		var ip = req.headers['x-forwarded-for'] ||
 			req.connection.remoteAddress ||
-			req.socket.remoteAddress
+			req.socket.remoteAddress || req.connection.socket.remoteAddress
 
 		req.session.user = user.id
 
@@ -1030,29 +1030,8 @@ class Lawn extends Vineyard.Bulb {
 		app.use(require('cookie-parser')());
 
 		var session:any = require('express-session')
-		//if (typeof this.config.mysql_session_store == 'object') {
-		//	var MySQL_Session_Store = require('express-mysql-session')
-		//	var storage_config = <Lawn.Session_Store_Config>this.config.mysql_session_store
-		//
-		//	console.log('using mysql sessions store: ', storage_config.db)
-		//
-		//	app.use(session({
-		//		key: storage_config.key,
-		//		secret: storage_config.secret,
-		//		resave: true,
-		//		saveUninitialized: true,
-		//		store: new MySQL_Session_Store(storage_config.db)
-		//	}))
-		//}
-		//else
-		{
 			if (!this.config.cookie_secret)
 				throw new Error('lawn.cookie_secret must be set!')
-
-			//var MySQL_Session_Store = require('express-mysql-session')
-			//var storage_config = <Lawn.Session_Store_Config>this.config.mysql_session_store
-
-			//console.log('using mysql sessions store: ', storage_config.db)
 
 			app.use(session({
 				secret: this.config.cookie_secret, resave: true,
@@ -1060,11 +1039,12 @@ class Lawn extends Vineyard.Bulb {
 				store: new mysql_session(this.ground.db)
 			}))
 
-			//app.use(session({
-			//	secret: this.config.cookie_secret, resave: true,
-			//	saveUninitialized: true
-			//}))
-		}
+		app.use(function (req, res, next) {
+			req.session.ip = req.headers['x-forwarded-for'] ||
+			req.connection.remoteAddress ||
+			req.socket.remoteAddress || req.connection.socket.remoteAddress;
+			next()
+		})
 
 		if (this.config.allow_cors === true) {
 			app.use(require('cors')())

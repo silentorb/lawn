@@ -47,7 +47,8 @@ Session_Store.prototype.set = function(id, data, callback) {
 		token: id,
 		user: data.user || 0,
 		expires: 0,//expires,
-		data: JSON.stringify(data)
+		data: JSON.stringify(data),
+		hostname: data.ip || null
 	}
 
 	this.db.query_single(sql, params)

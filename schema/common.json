@@ -109,7 +109,7 @@
         "user": {
           "type": "reference",
           "trellis": "user",
-          "default": 0
+          "default": 2
         },
         "hostname": {
           "type": "string",

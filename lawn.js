@@ -367,8 +367,10 @@ var Lawn = (function (_super) {
             console.log("WARNING: Fortress is not loaded.  Server will be running with minimal security.");
 
         return this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1").then(function () {
-            _this.start_http(_this.config.ports.http);
-            _this.start_sockets(_this.config.ports.websocket);
+            if (_this.config.ports.http)
+                _this.start_http(_this.config.ports.http);
+            if (_this.config.ports.websocket)
+                _this.start_sockets(_this.config.ports.websocket);
         });
     };
 

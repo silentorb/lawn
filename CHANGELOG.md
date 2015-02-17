@@ -1,5 +1,8 @@
 # Changelog - Vineyard Lawn #
 
+## 0.2.16 ##
+1. Now Lawn will only start a Socket.IO server if a webs socket port is configured.
+
 ## 0.2.15 ##
 1. Fixed session handling bugs
 

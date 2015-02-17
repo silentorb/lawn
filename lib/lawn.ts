@@ -187,8 +187,10 @@ class Lawn extends Vineyard.Bulb {
 
 		return this.ground.db.query("UPDATE users SET online = 0 WHERE online = 1")
 			.then(()=> {
-				this.start_http(this.config.ports.http);
-				this.start_sockets(this.config.ports.websocket);
+				if (this.config.ports.http)
+					this.start_http(this.config.ports.http);
+				if (this.config.ports.websocket)
+					this.start_sockets(this.config.ports.websocket);
 			})
 	}
 

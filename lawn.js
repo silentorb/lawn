@@ -1218,10 +1218,20 @@ var Lawn = (function (_super) {
         this.listen_public_http('/vineyard/password-reset', function (req, res) {
             return _this.password_reset_request(req, res, req.body);
         });
+
+        // Deprectaed in favor of vineyard/user.
         this.listen_user_http('/vineyard/current-user', function (req, res, user) {
             res.send({
                 status: 200,
                 user: Lawn.format_public_user(user)
+            });
+            return when.resolve();
+        }, 'get');
+
+        this.listen_user_http('/vineyard/user', function (req, res, user) {
+            res.send({
+                status: 200,
+                user: MetaHub.extend({}, user, ['id', 'name', 'username', 'email', 'roles'])
             });
             return when.resolve();
         }, 'get');

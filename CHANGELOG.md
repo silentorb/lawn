@@ -1,5 +1,9 @@
 # Changelog - Vineyard Lawn #
 
+## 0.2.17 ##
+1. Added vineyard/user which is similar to vineyard/current-user but also returns the user's roles 
+2. Deprecated vineyard/current-user
+
 ## 0.2.16 ##
 1. Now Lawn will only start a Socket.IO server if a webs socket port is configured.
 

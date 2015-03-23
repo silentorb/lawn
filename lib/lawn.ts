@@ -63,16 +63,17 @@ class Lawn extends Vineyard.Bulb {
 					return when.resolve()
 
 				var sql = "INSERT INTO update_logs (`trellis`, `user`, `data`, `created`, `modified`)\n"
-				+ "VALUES(?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())"
+					+ "VALUES(?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())"
 
 				when.resolve()
-				.then(()=> this.ground.db.query(sql, [
-							update.trellis.name,
-							update.user ? update.user.id : 0,
-							JSON.stringify(seed)
-						])
-					)
-				.done(()=>{}, (error)=> {
+					.then(()=> this.ground.db.query(sql, [
+						update.trellis.name,
+						update.user ? update.user.id : 0,
+						JSON.stringify(seed)
+					])
+				)
+					.done(()=> {
+					}, (error)=> {
 						console.error('update_log error', error)
 					})
 
@@ -1032,14 +1033,14 @@ class Lawn extends Vineyard.Bulb {
 		app.use(require('cookie-parser')());
 
 		var session:any = require('express-session')
-			if (!this.config.cookie_secret)
-				throw new Error('lawn.cookie_secret must be set!')
+		if (!this.config.cookie_secret)
+			throw new Error('lawn.cookie_secret must be set!')
 
-			app.use(session({
-				secret: this.config.cookie_secret, resave: true,
-				saveUninitialized: true,
-				store: new mysql_session(this.ground.db)
-			}))
+		app.use(session({
+			secret: this.config.cookie_secret, resave: true,
+			saveUninitialized: true,
+			store: new mysql_session(this.ground.db)
+		}))
 
 		app.use(function (req, res, next) {
 			req.session.ip = req.headers['x-forwarded-for'] ||
@@ -1076,10 +1077,20 @@ class Lawn extends Vineyard.Bulb {
 		}
 
 		this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_request(req, res, req.body))
+
+		// Deprectaed in favor of vineyard/user.
 		this.listen_user_http('/vineyard/current-user', (req, res, user)=> {
 			res.send({
 				status: 200,
 				user: Lawn.format_public_user(user)
+			})
+			return when.resolve()
+		}, 'get')
+
+		this.listen_user_http('/vineyard/user', (req, res, user)=> {
+			res.send({
+				status: 200,
+				user: MetaHub.extend({}, user, ['id', 'name', 'username', 'email', 'roles'])
 			})
 			return when.resolve()
 		}, 'get')

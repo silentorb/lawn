@@ -326,9 +326,9 @@ class Lawn extends Vineyard.Bulb {
 	}
 
 	logout(req, res, user) {
-		var sql = "DELETE FROM sessions WHERE user = ? AND token = ?"
-		return this.ground.db.query(sql, [user.id, req.sessionID])
-			.then(()=> res.json({key: 'logged-out'}))
+		console.log('Deleting session:', req.sessionID)
+		req.session.destroy()
+    res.json({key: 'logged-out'})
 	}
 
 	is_configured_for_password_reset():boolean {
@@ -894,7 +894,6 @@ class Lawn extends Vineyard.Bulb {
 		)
 	}
 
-
 	process_error(error, user) {
 		var status = error.status || 500
 		var message = status == 500 ? 'Server Error' : error.message
@@ -1078,19 +1077,11 @@ class Lawn extends Vineyard.Bulb {
 
 		this.listen_public_http('/vineyard/password-reset', (req, res)=> this.password_reset_request(req, res, req.body))
 
-		// Deprectaed in favor of vineyard/user.
+		// Deprecated in favor of a query using the new user parameter.
 		this.listen_user_http('/vineyard/current-user', (req, res, user)=> {
 			res.send({
 				status: 200,
 				user: Lawn.format_public_user(user)
-			})
-			return when.resolve()
-		}, 'get')
-
-		this.listen_user_http('/vineyard/user', (req, res, user)=> {
-			res.send({
-				status: 200,
-				user: MetaHub.extend({}, user, ['id', 'name', 'username', 'email', 'roles'])
 			})
 			return when.resolve()
 		}, 'get')

@@ -59,7 +59,7 @@ Session_Store.prototype.set = function(id, data, callback) {
 }
 
 Session_Store.prototype.destroy = function(id, callback) {
-	var sql = 'DELETE FROM `sessions` WHERE `session_id` = ?'
+	var sql = 'DELETE FROM `sessions` WHERE `token` = ?'
 	this.db.query_single(sql, [id])
 		.done((row)=> {
 			callback && callback()

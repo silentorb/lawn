@@ -33,6 +33,7 @@ declare class Gardener {
 }
 declare class Irrigation {
     static query(request: Ground.External_Query_Source, user: Vineyard.IUser, lawn: any): Promise;
+    static inject_user(query: Ground.External_Query_Source, user: Vineyard.IUser): void;
     static run_query(query: Ground.Query_Builder, user: Vineyard.IUser, vineyard: Vineyard, request: Ground.External_Query_Source): Promise;
     static update2(request: Update_Request, user: any, lawn: any): Promise;
     static grow(lawn: any): void;
@@ -80,7 +81,7 @@ declare class Lawn extends Vineyard.Bulb {
     public get_schema(req: any, res: any, user: any): void;
     public get_user_from_session(token: string): Promise;
     public http_login(req: any, res: any, body: any): Promise;
-    public logout(req: any, res: any, user: any): Promise;
+    public logout(req: any, res: any, user: any): void;
     public is_configured_for_password_reset(): boolean;
     public check_password_reset_configuration(req: any, res: any, body: any): Promise;
     public password_reset_request(req: any, res: any, body: any): Promise;

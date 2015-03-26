@@ -98,6 +98,9 @@ var Irrigation = (function () {
 
         var trellis = ground.sanitize_trellis_argument(request.trellis);
         var query = new Ground.Query_Builder(trellis);
+
+        Irrigation.inject_user(request, user);
+
         query.extend(request);
 
         var fortress = vineyard.bulbs.fortress;
@@ -110,6 +113,17 @@ var Irrigation = (function () {
                 throw new Authorization_Error(result.get_message(), user);
             }
         });
+    };
+
+    Irrigation.inject_user = function (query, user) {
+        if (query.filters) {
+            for (var i = 0; i < query.filters.length; ++i) {
+                var filter = query.filters[i];
+                if (filter.type == 'parameter' && filter.value == 'user') {
+                    filter.value = user.id;
+                }
+            }
+        }
     };
 
     Irrigation.run_query = function (query, user, vineyard, request) {
@@ -487,10 +501,9 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.logout = function (req, res, user) {
-        var sql = "DELETE FROM sessions WHERE user = ? AND token = ?";
-        return this.ground.db.query(sql, [user.id, req.sessionID]).then(function () {
-            return res.json({ key: 'logged-out' });
-        });
+        console.log('Deleting session:', req.sessionID);
+        req.session.destroy();
+        res.json({ key: 'logged-out' });
     };
 
     Lawn.prototype.is_configured_for_password_reset = function () {
@@ -1219,19 +1232,11 @@ var Lawn = (function (_super) {
             return _this.password_reset_request(req, res, req.body);
         });
 
-        // Deprectaed in favor of vineyard/user.
+        // Deprecated in favor of a query using the new user parameter.
         this.listen_user_http('/vineyard/current-user', function (req, res, user) {
             res.send({
                 status: 200,
                 user: Lawn.format_public_user(user)
-            });
-            return when.resolve();
-        }, 'get');
-
-        this.listen_user_http('/vineyard/user', function (req, res, user) {
-            res.send({
-                status: 200,
-                user: MetaHub.extend({}, user, ['id', 'name', 'username', 'email', 'roles'])
             });
             return when.resolve();
         }, 'get');

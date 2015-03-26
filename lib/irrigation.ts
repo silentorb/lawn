@@ -14,22 +14,36 @@ class Irrigation {
     if (!ground.trellises[request.trellis])
       throw new HttpError('Invalid trellis: ' + request.trellis + '.', 400, 'invalid-trellis')
 
-    var trellis = ground.sanitize_trellis_argument(request.trellis);
-    var query = new Ground.Query_Builder(trellis);
+    var trellis = ground.sanitize_trellis_argument(request.trellis)
+    var query = new Ground.Query_Builder(trellis)
+
+    Irrigation.inject_user(request, user)
+
     query.extend(request)
 
     var fortress = vineyard.bulbs.fortress
     return fortress.query_access(user, query)
       .then((result)=> {
-            //console.log('fortress', result)
+        //console.log('fortress', result)
         if (result.is_allowed) {
-					result.secure_query(query)
-					return Irrigation.run_query(query, user, vineyard, request)
-				}
+          result.secure_query(query)
+          return Irrigation.run_query(query, user, vineyard, request)
+        }
         else {
           throw new Authorization_Error(result.get_message(), user)
         }
       })
+  }
+
+  static inject_user(query:Ground.External_Query_Source, user:Vineyard.IUser) {
+    if (query.filters) {
+      for (var i = 0; i < query.filters.length; ++i) {
+        var filter = query.filters[i]
+        if (filter.type == 'parameter' && filter.value == 'user') {
+          filter.value = user.id
+        }
+      }
+    }
   }
 
   static run_query(query:Ground.Query_Builder, user:Vineyard.IUser, vineyard:Vineyard, request:Ground.External_Query_Source):Promise {

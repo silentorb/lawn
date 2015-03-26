@@ -1,5 +1,9 @@
 # Changelog - Vineyard Lawn #
 
+## 0.2.18 ##
+1. Removed vineyard/user because it was too inflexible.
+2. Replaced it with the ability to inject the current user into queries.
+
 ## 0.2.17 ##
 1. Added vineyard/user which is similar to vineyard/current-user but also returns the user's roles 
 2. Deprecated vineyard/current-user

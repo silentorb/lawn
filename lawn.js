@@ -168,9 +168,6 @@ var Irrigation = (function () {
         if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
             throw new HttpError('The request must have a version property.', 400, 'version-required');
 
-        if (user.id == 2)
-            throw new Authorization_Error('Anonymous cannot create content.', user);
-
         var updates = request.objects.map(function (object) {
             return ground.create_update(object.trellis, object, user);
         });

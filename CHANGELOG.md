@@ -1,5 +1,8 @@
 # Changelog - Vineyard Lawn #
 
+## 0.2.19 ##
+1. Removed the hard restriction prohibiting anonymous users from creating content.
+
 ## 0.2.18 ##
 1. Removed vineyard/user because it was too inflexible.
 2. Replaced it with the ability to inject the current user into queries.

@@ -22,9 +22,9 @@ interface Update_Request {
 }
 interface Service_Definition {
     http_path: string;
-    socket_path: string;
-    authorization: (user: any, fortress: any) => any;
-    validation: string;
+    socket_path?: string;
+    authorization?: (user: any, fortress: any) => any;
+    validation?: string;
     action: (data: any, user: any) => Promise;
 }
 declare class Gardener {
@@ -110,8 +110,6 @@ declare class Lawn extends Vineyard.Bulb {
     public process_user_http(req: any, res: any, action: any): void;
     public listen_user_http(path: any, action: any, method?: string): void;
     public start_sockets(port?: any): void;
-    public file_download(req: any, res: any, user: any): Promise;
-    private static file_exists(filepath);
     public start_http(port: any): void;
     public stop(): void;
     public user_is_online(id: number): boolean;

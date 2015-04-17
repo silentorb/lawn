@@ -1119,42 +1119,6 @@ var Lawn = (function (_super) {
         }
     };
 
-    Lawn.prototype.file_download = function (req, res, user) {
-        var _this = this;
-        var guid = req.params.guid;
-        var ext = req.params.ext;
-        if (!guid.match(/[\w\-]+/) || !ext.match(/\w+/))
-            throw new HttpError('Invalid File Name', 400);
-
-        var path = require('path');
-        var filepath = path.join(this.vineyard.root_path, this.config.file_path || 'files', guid + '.' + ext);
-        console.log(filepath);
-        return Lawn.file_exists(filepath).then(function (exists) {
-            if (!exists)
-                throw new HttpError('File Not Found', 404);
-
-            //          throw new Error('File Not Found')
-            var query = _this.ground.create_query('file');
-            query.add_key_filter(req.params.guid);
-            var fortress = _this.vineyard.bulbs.fortress;
-
-            fortress.query_access(user, query).then(function (result) {
-                if (result.access)
-                    res.sendfile(filepath);
-                else
-                    throw new Authorization_Error('Access Denied', user);
-            });
-        });
-    };
-
-    Lawn.file_exists = function (filepath) {
-        var fs = require('fs'), def = when.defer();
-        fs.exists(filepath, function (exists) {
-            def.resolve(exists);
-        });
-        return def.promise;
-    };
-
     Lawn.prototype.start_http = function (port) {
         var _this = this;
         if (!port)
@@ -1168,7 +1132,6 @@ var Lawn = (function (_super) {
         var express = require('express');
         var app = this.app = express();
 
-        //app.use(require('body-parser')({keepExtensions: true, uploadDir: "tmp"}));
         var parser = require('body-parser');
         app.use(parser.json());
         app.use(require('cookie-parser')());
@@ -1238,43 +1201,7 @@ var Lawn = (function (_super) {
             return when.resolve();
         }, 'get');
 
-        this.listen_user_http('/vineyard/upload', function (req, res, user) {
-            console.log('files', req.files);
-            console.log('req.body', req.body);
-            var info = JSON.parse(req.body.info);
-            var file = req.files.file;
-            var guid = info.guid;
-            if (!guid)
-                throw new HttpError('guid is empty.', 400);
-
-            if (!guid.match(/[\w\-]+/))
-                throw new HttpError('Invalid guid.', 400);
-
-            var path = require('path');
-            var ext = path.extname(file.originalFilename) || '';
-            var filename = guid + ext;
-            var filepath = (_this.config.file_path || 'files') + '/' + filename;
-            var fs = require('fs');
-            fs.rename(file.path, filepath);
-
-            // !!! Add check if file already exists
-            return _this.ground.update_object('file', {
-                guid: guid,
-                name: filename,
-                path: file.path,
-                size: file.size,
-                extension: ext.substring(1),
-                status: 1
-            }, user).then(function (object) {
-                res.send({ file: object });
-                _this.invoke('file.uploaded', object);
-            });
-        });
-
         //    this.listen_public_http('/vineyard/register', (req, res)=> this.register(req, res))
-        this.listen_user_http('/file/:guid.:ext', function (req, res, user) {
-            return _this.file_download(req, res, user);
-        }, 'get');
         this.listen_user_http('/vineyard/facebook/link', function (req, res, user) {
             return _this.link_facebook_user(req, res, user);
         }, 'post');

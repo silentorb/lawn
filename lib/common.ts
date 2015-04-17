@@ -45,8 +45,8 @@ interface Update_Request {
 
 interface Service_Definition {
   http_path:string
-  socket_path:string
-  authorization:(user, fortress)=>any
-  validation:string
+  socket_path?:string
+  authorization?:(user, fortress)=>any
+  validation?:string
   action:(data, user)=>Promise
 }

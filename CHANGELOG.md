@@ -1,5 +1,8 @@
 # Changelog - Vineyard Lawn #
 
+## 0.3.0 ##
+1. Moved the uploading and downloading features into a separate bulb: vineyard-cellar.
+
 ## 0.2.19 ##
 1. Removed the hard restriction prohibiting anonymous users from creating content.
 

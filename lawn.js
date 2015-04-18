@@ -294,7 +294,7 @@ var Lawn = (function (_super) {
 
         this.config['valid_password'] = typeof this.config.valid_password == 'string' ? new RegExp(this.config.valid_password) : /^[A-Za-z\- _0-9!@#\$%\^&\*\(\)?]+$/;
 
-        this.config['valid_display_name'] = typeof this.config.valid_display_name == 'string' ? new RegExp(this.config.valid_display_name) : /^[A-Za-z\-_0-9]+$/;
+        this.config['valid_display_name'] = typeof this.config.valid_display_name == 'string' ? new RegExp(this.config.valid_display_name) : /^[A-Za-z\-_0-9 ]+$/;
 
         Irrigation.grow(this);
 
@@ -785,42 +785,49 @@ var Lawn = (function (_super) {
                 var user = {};
                 var trellis = _this.ground.trellises['user'];
                 var properties = trellis.get_all_properties();
+                var embedded_objects = [];
                 for (var i in properties) {
                     var property = properties[i];
-
-                    //console.log(property.name, property == trellis.primary_key || property.other_trellis != null, body[property.name]);
+                    console.log(property.name, property == trellis.primary_key || property.other_trellis != null, body[property.name]);
                     if (property == trellis.primary_key)
                         continue;
 
                     if (body[property.name] !== undefined && typeof body[property.name] !== 'object')
                         user[property.name] = body[property.name];
+                    else if (typeof body[property.name] === 'object')
+                        embedded_objects.push(property);
                 }
                 user['roles'] = [2];
 
-                //var user = {
-                //  username: username,
-                //  email: email,
-                //  password: body.password,
-                //  gender: gender,
-                //  phone: phone,
-                //  roles: [2],
-                //  address: body.address,
-                //  image: body.image
-                //}
-                //user[this.config.display_name_key] = display_name
                 console.log('user', user, facebook_id);
                 _this.ground.create_update('user', user).run().then(function (user) {
-                    var finished = function () {
+                    var promises = [];
+                    if (embedded_objects.length > 0) {
+                        var seed = {
+                            id: user.id
+                        };
+                        for (var i in embedded_objects) {
+                            var property = embedded_objects[i];
+                            seed[property.name] = body[property.name];
+                        }
+                        promises.push(function () {
+                            return _this.ground.update_object('user', seed, user);
+                        });
+                    }
+
+                    if (facebook_id)
+                        promises.push(function () {
+                            return _this.ground.db.query_single("UPDATE users SET facebook_id = ? WHERE id = ?", [facebook_id, user.id]);
+                        });
+
+                    var sequence = require('when/sequence');
+                    return sequence(promises).then(function () {
                         user.facebook_id = facebook_id;
                         res.send({
                             message: 'User ' + username + ' created successfully.',
                             user: user
                         });
-                    };
-                    if (facebook_id)
-                        return _this.ground.db.query_single("UPDATE users SET facebook_id = ? WHERE id = ?", [facebook_id, user.id]).then(finished);
-
-                    finished();
+                    });
                 });
             });
         };

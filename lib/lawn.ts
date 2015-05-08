@@ -81,7 +81,7 @@ class Lawn extends Vineyard.Bulb {
 			})
 		}
 
-		this.listen(ground, 'user.queried', (user, query:Ground.Query_Builder)=> this.query_user(user, query))
+		this.listen(ground, 'user.queried', (user, query:mining.Query_Builder)=> this.query_user(user, query))
 
 		if (this.config.mail)
 			this.mail = new Lawn.Mail(this.config.mail)
@@ -175,7 +175,7 @@ class Lawn extends Vineyard.Bulb {
 	}
 
 	// Attach user online status to any queried users
-	query_user(user, query:Ground.Query_Builder) {
+	query_user(user, query:mining.Query_Builder) {
 		if (!this.io)
 			return
 
@@ -228,7 +228,7 @@ class Lawn extends Vineyard.Bulb {
 		var id = typeof user == 'object' ? user.id : user
 		var query = this.ground.create_query('user')
 		query.add_key_filter(id)
-		return query.run_single(null)
+		return query.run_single(null, this.ground.miner)
 			.then((user)=> Lawn.format_public_user(user))
 	}
 
@@ -246,7 +246,7 @@ class Lawn extends Vineyard.Bulb {
 		query.add_key_filter(token)
 		query.add_subquery('user').add_subquery('roles')
 
-		return query.run_single(null)
+		return query.run_single(null, this.ground.miner)
 			.then((session) => {
 				//console.log('session', session)
 				var user = !session || session.token === 0 || typeof session.user !== 'object' || !session.user.id
@@ -553,7 +553,7 @@ class Lawn extends Vineyard.Bulb {
 	send_http_login_success(req, res, user, query_arguments = null) {
 		var query = this.ground.create_query('user')
 		query.add_key_filter(user.id)
-		var run_query = ()=> query.run_single(user)
+		var run_query = ()=> query.run_single(user, this.ground.miner)
 			.then((row)=> {
 				res.send({
 					token: req.sessionID,
@@ -636,7 +636,7 @@ class Lawn extends Vineyard.Bulb {
 						return when.reject(new HttpError('That ' + rows[0].value + ' is already taken.', 400))
 
 					var user = {};
-					var trellis = this.ground.trellises['user']
+					var trellis = this.ground.schema.trellises['user']
 					var properties = trellis.get_all_properties()
           var embedded_objects = []
 					for (var i in properties) {

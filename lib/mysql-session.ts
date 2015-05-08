@@ -2,19 +2,7 @@
 
 var express_session:any = require('express-session')
 
-//class Session_Store extends express_session.Store {
-//	db:Ground.Database
-//
-//	constructor(db:Ground.Database) {
-//		super()
-//		this.db = db
-//	}
-//
-//	get(id, callback) {
-
-//}
-
-var Session_Store = function (db:Ground.Database, callback = null) {
+var Session_Store = function (db:Database, callback = null) {
 	this.db = db
 	return callback && callback()
 }

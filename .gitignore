@@ -1,3 +1,6 @@
 tscommand*
 .tscache
 node_modules
+lib/*.js
+lib/*.d.ts
+lib/*.js.map

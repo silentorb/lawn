@@ -93,11 +93,11 @@ var Irrigation = (function () {
         if (!request)
             throw new HttpError('Empty request', 400);
 
-        if (!ground.trellises[request.trellis])
+        if (!ground.schema.trellises[request.trellis])
             throw new HttpError('Invalid trellis: ' + request.trellis + '.', 400, 'invalid-trellis');
 
         var trellis = ground.sanitize_trellis_argument(request.trellis);
-        var query = new Ground.Query_Builder(trellis);
+        var query = lawn.ground.create_query(trellis);
 
         Irrigation.inject_user(request, user);
 
@@ -134,7 +134,7 @@ var Irrigation = (function () {
             query_result.return_sql = true;
 
         var start = Date.now();
-        return query.run(user, query_result).then(function (result) {
+        return query.run(user, vineyard.ground.miner, query_result).then(function (result) {
             result.query_stats.duration = Math.abs(Date.now() - start);
             if (result.sql && !vineyard.ground.log_queries)
                 console.log('\nservice-query:', "\n" + result.sql);
@@ -149,7 +149,7 @@ var Irrigation = (function () {
                 // but the response does not wait for this log to be stored.
                 // I'm doing it this way because the whole point of this log is performance timing
                 // and I don't want it to bloat the perceived external request time.
-                query.ground.db.query(sql, [
+                vineyard.ground.db.query(sql, [
                     user.id,
                     query.trellis.name,
                     JSON.stringify(request),
@@ -415,7 +415,7 @@ var Lawn = (function (_super) {
         var id = typeof user == 'object' ? user.id : user;
         var query = this.ground.create_query('user');
         query.add_key_filter(id);
-        return query.run_single(null).then(function (user) {
+        return query.run_single(null, this.ground.miner).then(function (user) {
             return Lawn.format_public_user(user);
         });
     };
@@ -432,7 +432,7 @@ var Lawn = (function (_super) {
         query.add_key_filter(token);
         query.add_subquery('user').add_subquery('roles');
 
-        return query.run_single(null).then(function (session) {
+        return query.run_single(null, this.ground.miner).then(function (session) {
             //console.log('session', session)
             var user = !session || session.token === 0 || typeof session.user !== 'object' || !session.user.id ? { id: 2, username: 'anonymous', roles: [{ id: 3, name: 'anonymous' }] } : session.user;
 
@@ -708,7 +708,7 @@ var Lawn = (function (_super) {
         var query = this.ground.create_query('user');
         query.add_key_filter(user.id);
         var run_query = function () {
-            return query.run_single(user).then(function (row) {
+            return query.run_single(user, _this.ground.miner).then(function (row) {
                 res.send({
                     token: req.sessionID,
                     message: 'Login successful',
@@ -783,7 +783,7 @@ var Lawn = (function (_super) {
                     return when.reject(new HttpError('That ' + rows[0].value + ' is already taken.', 400));
 
                 var user = {};
-                var trellis = _this.ground.trellises['user'];
+                var trellis = _this.ground.schema.trellises['user'];
                 var properties = trellis.get_all_properties();
                 var embedded_objects = [];
                 for (var i in properties) {
@@ -1414,10 +1414,6 @@ var Lawn;
 })(Lawn || (Lawn = {}));
 Lawn.HttpError = HttpError;
 Lawn.Irrigation = Irrigation;
-/**
-* User: Chris Johnson
-* Date: 11/9/2014
-*/
 /// <reference path="../../vineyard/vineyard.d.ts"/>
 ///<reference path="../defs/socket.io.extension.d.ts"/>
 ///<reference path="../defs/express.d.ts"/>
@@ -1430,6 +1426,7 @@ Lawn.Irrigation = Irrigation;
 * Date: 11/9/2014
 */
 /// <reference path="references.ts"/>
+var MetaHub = require('vineyard-metahub')
 module.exports = Lawn
 function typescript_bulb_export_hack() {
 }

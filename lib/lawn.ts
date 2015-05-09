@@ -1013,7 +1013,13 @@ class Lawn extends Vineyard.Bulb {
 		})
 
 		if (this.config.allow_cors === true) {
-			app.use(require('cors')())
+			app.use(require('cors')({
+        origin: function(origin, callback) {
+          console.log('cors', origin)
+          callback(null, true)
+        },
+        credentials: true
+      }))
 			console.log('Using CORS')
 		}
 

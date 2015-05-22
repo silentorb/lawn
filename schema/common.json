@@ -63,43 +63,6 @@
         }
       }
     },
-    "file": {
-      "primary_key": "guid",
-      "properties": {
-        "guid": {
-          "type": "guid"
-        },
-        "name": {
-          "type": "string",
-          "default": ""
-        },
-        "path": {
-          "type": "string",
-          "default": ""
-        },
-        "size": {
-          "type": "int",
-          "default": 0
-        },
-        "author": {
-          "type": "reference",
-          "trellis": "user",
-          "insert": "author",
-          "allow_null": true
-        },
-        "timestamp": {
-          "type": "created"
-        },
-        "extension": {
-          "type": "string",
-          "default": ""
-        },
-        "status": {
-          "type": "int",
-          "default": 0
-        }
-      }
-    },
     "session": {
       "primary_key": "token",
       "properties": {
@@ -153,15 +116,6 @@
         },
         "modified": {
           "type": "modified"
-        }
-      }
-    },
-    "user":{
-      "properties":{
-        "image": {
-          "type": "reference",
-          "trellis": "file",
-          "allow_null": true
         }
       }
     },

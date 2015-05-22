@@ -2,7 +2,7 @@
 
 class Irrigation {
 
-  static query(request:mining.External_Query_Source, user:Vineyard.IUser, lawn):Promise {
+  static query(request:Ground.External_Query_Source, user:Vineyard.IUser, lawn):Promise {
     var ground:Ground.Core = lawn.ground, vineyard:Vineyard = lawn.vineyard
     var Fortress = require('vineyard-fortress')
     if (vineyard.bulbs['lawn'].config.require_version === true && !request.version)
@@ -11,11 +11,11 @@ class Irrigation {
     if (!request)
       throw new HttpError('Empty request', 400)
 
-    if (!ground.schema.trellises[request.trellis])
+    if (!ground.trellises[request.trellis])
       throw new HttpError('Invalid trellis: ' + request.trellis + '.', 400, 'invalid-trellis')
 
     var trellis = ground.sanitize_trellis_argument(request.trellis)
-    var query = lawn.ground.create_query(trellis)
+    var query = new Ground.Query_Builder(trellis)
 
     Irrigation.inject_user(request, user)
 
@@ -35,7 +35,7 @@ class Irrigation {
       })
   }
 
-  static inject_user(query:mining.External_Query_Source, user:Vineyard.IUser) {
+  static inject_user(query:Ground.External_Query_Source, user:Vineyard.IUser) {
     if (query.filters) {
       for (var i = 0; i < query.filters.length; ++i) {
         var filter = query.filters[i]
@@ -46,15 +46,15 @@ class Irrigation {
     }
   }
 
-  static run_query(query:mining.Query_Builder, user:Vineyard.IUser, vineyard:Vineyard, request:mining.External_Query_Source):Promise {
+  static run_query(query:Ground.Query_Builder, user:Vineyard.IUser, vineyard:Vineyard, request:Ground.External_Query_Source):Promise {
     var lawn = vineyard.bulbs['lawn']
-    var query_result:mining.Query_Result = {query_count: 0, user: user}
+    var query_result:Ground.Query_Result = {query_count: 0, user: user}
     var fortress = vineyard.bulbs.fortress
     if (request.return_sql === true && (!fortress || fortress.user_has_role(user, 'dev')))
       query_result.return_sql = true;
 
     var start = Date.now()
-    return query.run(user, vineyard.ground.miner, query_result)
+    return query.run(user, query_result)
       .then((result)=> {
         result.query_stats.duration = Math.abs(Date.now() - start)
         if (result.sql && !vineyard.ground.log_queries)
@@ -71,7 +71,7 @@ class Irrigation {
           // but the response does not wait for this log to be stored.
           // I'm doing it this way because the whole point of this log is performance timing
           // and I don't want it to bloat the perceived external request time.
-            vineyard.ground.db.query(sql, [
+          query.ground.db.query(sql, [
             user.id,
             query.trellis.name,
             JSON.stringify(request),

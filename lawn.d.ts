@@ -32,9 +32,9 @@ declare class Gardener {
     static grow(lawn: any): void;
 }
 declare class Irrigation {
-    static query(request: mining.External_Query_Source, user: Vineyard.IUser, lawn: any): Promise;
-    static inject_user(query: mining.External_Query_Source, user: Vineyard.IUser): void;
-    static run_query(query: mining.Query_Builder, user: Vineyard.IUser, vineyard: Vineyard, request: mining.External_Query_Source): Promise;
+    static query(request: Ground.External_Query_Source, user: Vineyard.IUser, lawn: any): Promise;
+    static inject_user(query: Ground.External_Query_Source, user: Vineyard.IUser): void;
+    static run_query(query: Ground.Query_Builder, user: Vineyard.IUser, vineyard: Vineyard, request: Ground.External_Query_Source): Promise;
     static update2(request: Update_Request, user: any, lawn: any): Promise;
     static grow(lawn: any): void;
 }
@@ -70,7 +70,7 @@ declare class Lawn extends Vineyard.Bulb {
     public notify(user: any, name: any, data: any, trellis_name: string): Promise;
     public get_user_sockets(id: number): Socket[];
     public initialize_session(socket: any, user: any): void;
-    public query_user(user: any, query: mining.Query_Builder): void;
+    public query_user(user: any, query: Ground.Query_Builder): void;
     public start(): Promise;
     static public_user_properties: string[];
     static internal_user_properties: string[];

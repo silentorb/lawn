@@ -1,5 +1,8 @@
 # Changelog - Vineyard Lawn #
 
+## 0.3.2 (Not yet published) ##
+1. Moved the file (and user.image) schema into vineyard-cellar.
+
 ## 0.3.1 ##
 1. Now the default display_name validation pattern allows spaces.
 2. Registration seeds can now contain embedded objects.

@@ -1,6 +1,6 @@
 # Changelog - Vineyard Lawn #
 
-## 0.3.2 (Not yet published) ##
+## 0.3.2 ##
 1. Moved the file (and user.image) schema into vineyard-cellar.
 
 ## 0.3.1 ##

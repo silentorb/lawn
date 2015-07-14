@@ -1,5 +1,8 @@
 # Changelog - Vineyard Lawn #
 
+## 0.3.3 ##
+1. You can now login with a username or email address.  This hinges on '@' so '@' should not be allowed in usernames.
+
 ## 0.3.2 ##
 1. Moved the file (and user.image) schema into vineyard-cellar.
 

@@ -292,7 +292,7 @@ var Lawn = (function (_super) {
 
         this.config['valid_username'] = typeof this.config.valid_username == 'string' ? new RegExp(this.config.valid_username) : /^[A-Za-z\-_0-9]+$/;
 
-        this.config['valid_password'] = typeof this.config.valid_password == 'string' ? new RegExp(this.config.valid_password) : /^[A-Za-z\- _0-9!@#\$%\^&\*\(\)?]+$/;
+        this.config['valid_password'] = typeof this.config.valid_password == 'string' ? new RegExp(this.config.valid_password) : /^[A-Za-z\- _0-9!@#$%^&*()?,.<>~+]+$/;
 
         this.config['valid_display_name'] = typeof this.config.valid_display_name == 'string' ? new RegExp(this.config.valid_display_name) : /^[A-Za-z\-_0-9 ]+$/;
 
@@ -450,20 +450,22 @@ var Lawn = (function (_super) {
         var username = body.username || body.name;
         var password = user_bulb.prepare_password(body.password || body.pass);
 
-        var sql = "SELECT id, " + this.config.display_name_key + ", status FROM users WHERE username = ? AND password = ?";
+        var username_check = username.indexOf('@') == -1 ? "\nWHERE users.username = ?" : "\nWHERE users.email = ?";
+
+        var sql = "SELECT id, " + this.config.display_name_key + ", status FROM users" + username_check + "\n AND password = ?";
 
         console.log('login', body);
         return this.ground.db.query_single(sql, [username, password]).then(function (user) {
             if (user)
                 return when.resolve(user);
 
-            var sql = "SELECT users.id, users.username, users.status, requests.password as new_password FROM users " + "\nJOIN password_reset_requests requests ON requests.user = users.id" + "\nWHERE users.username = ? AND requests.password = ?" + "\nAND requests.used = 0" + "\nAND requests.created > UNIX_TIMESTAMP() - 12 * 60 * 60";
-            console.log('sql', sql);
-            return _this.ground.db.query_single(sql, [username, password]).then(function (user) {
-                console.log('hey', user, [username, password]);
-                if (!user)
-                    throw new HttpError('Invalid username or password.', 400);
+            var sql = "SELECT users.id, users.username, users.status, requests.password as new_password FROM users " + "\nJOIN password_reset_requests requests ON requests.user = users.id" + username_check + "\nAND requests.password = ?" + "\nAND requests.used = 0" + "\nAND requests.created > UNIX_TIMESTAMP() - 12 * 60 * 60";
 
+            return _this.ground.db.query_single(sql, [username, password]).then(function (user) {
+                if (!user) {
+                    console.error('user-login', username, password, sql);
+                    throw new HttpError('Invalid username or password.', 400);
+                }
                 if (user.status === 0)
                     throw new Authorization_Error('This account has been disabled.', user);
 

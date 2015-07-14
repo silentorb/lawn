@@ -97,7 +97,7 @@ class Lawn extends Vineyard.Bulb {
 
 		this.config['valid_password'] = typeof this.config.valid_password == 'string'
 			? new RegExp(this.config.valid_password)
-			: /^[A-Za-z\- _0-9!@#\$%\^&\*\(\)?]+$/
+			: /^[A-Za-z\- _0-9!@#$%^&*()?,.<>~+]+$/
 
 		this.config['valid_display_name'] = typeof this.config.valid_display_name == 'string'
 			? new RegExp(this.config.valid_display_name)
@@ -267,10 +267,16 @@ class Lawn extends Vineyard.Bulb {
 		var username = body.username || body.name
 		var password = user_bulb.prepare_password(body.password || body.pass)
 
-		var sql = "SELECT id, " + this.config.display_name_key
-			+ ", status FROM users WHERE username = ? AND password = ?"
+    var username_check = username.indexOf('@') == -1
+      ? "\nWHERE users.username = ?"
+      : "\nWHERE users.email = ?"
 
-		console.log('login', body)
+    var sql = "SELECT id, " + this.config.display_name_key
+      + ", status FROM users"
+      + username_check
+      + "\n AND password = ?"
+
+    console.log('login', body)
 		return this.ground.db.query_single(sql, [username, password])
 			.then((user)=> {
 				if (user)
@@ -278,16 +284,17 @@ class Lawn extends Vineyard.Bulb {
 
 				var sql = "SELECT users.id, users.username, users.status, requests.password as new_password FROM users "
 					+ "\nJOIN password_reset_requests requests ON requests.user = users.id"
-					+ "\nWHERE users.username = ? AND requests.password = ?"
-					+ "\nAND requests.used = 0"
+          + username_check
+          + "\nAND requests.password = ?"
+          + "\nAND requests.used = 0"
 					+ "\nAND requests.created > UNIX_TIMESTAMP() - 12 * 60 * 60"
-				console.log('sql', sql)
+
 				return this.ground.db.query_single(sql, [username, password])
 					.then((user)=> {
-						console.log('hey', user, [username, password])
-						if (!user)
-							throw new HttpError('Invalid username or password.', 400)
-
+						if (!user) {
+              console.error('user-login', username, password, sql)
+              throw new HttpError('Invalid username or password.', 400)
+            }
 						if (user.status === 0)
 							throw new Authorization_Error('This account has been disabled.', user)
 
@@ -670,7 +677,7 @@ class Lawn extends Vineyard.Bulb {
 							if (facebook_id)
 								promises.push(()=> this.ground.db.query_single("UPDATE users SET facebook_id = ? WHERE id = ?", [facebook_id, user.id]))
 
-              var sequence = require('when/sequence')
+              var sequence:any = require('when/sequence')
               return sequence(promises)
               .then(()=> {
                   user.facebook_id = facebook_id
@@ -755,7 +762,7 @@ class Lawn extends Vineyard.Bulb {
 //    if (secure)
 //      options.secureProtocol = 'SSLv3_method'
 
-		var req = http.request(options, function (res) {
+		var req = http.request(options, function (res:any) {
 			res.setEncoding('utf8')
 			if (res.statusCode != '200') {
 				res.on('data', function (chunk) {
@@ -971,7 +978,7 @@ class Lawn extends Vineyard.Bulb {
 
 		if (this.config.use_redis) {
 			console.log('using redis')
-			var RedisStore = require('socket.io/lib/stores/redis'), redis = require("socket.io/node_modules/redis"), pub = redis.createClient(), sub = redis.createClient(), client = redis.createClient()
+			var RedisStore:any = require('socket.io/lib/stores/redis'), redis = require("socket.io/node_modules/redis"), pub = redis.createClient(), sub = redis.createClient(), client = redis.createClient()
 
 			io.set('store', new RedisStore({
 				redisPub: pub, redisSub: sub, redisClient: client

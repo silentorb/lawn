@@ -1,5 +1,9 @@
 # Changelog - Vineyard Lawn #
 
+## 0.3.4 ##
+1. Added real support for SSL.  For now Vineyard won't support mixed http/https, In a pinch it might work to run two 
+instances of Vineyard at the same time if needed.
+
 ## 0.3.3 ##
 1. You can now login with a username or email address.  This hinges on '@' so '@' should not be allowed in usernames.
 

@@ -137,6 +137,10 @@ declare module Lawn {
         cookie_secret?: string;
         expires?: number;
     }
+    interface SSL_Config {
+        key: string;
+        cert: string;
+    }
     interface Config {
         ports: any;
         log_updates?: boolean;
@@ -157,6 +161,7 @@ declare module Lawn {
         allow_cors?: boolean;
         allow_register?: boolean;
         max_connections?: number;
+        ssl?: SSL_Config;
     }
     class Facebook extends Vineyard.Bulb {
         public lawn: Lawn;

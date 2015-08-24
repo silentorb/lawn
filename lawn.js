@@ -705,8 +705,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.send_http_login_success = function (req, res, user, query_arguments) {
-        var _this = this;
         if (typeof query_arguments === "undefined") { query_arguments = null; }
+        var _this = this;
         var query = this.ground.create_query('user');
         query.add_key_filter(user.id);
         var run_query = function () {
@@ -1085,8 +1085,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.listen_user_http = function (path, action, method) {
-        var _this = this;
         if (typeof method === "undefined") { method = 'post'; }
+        var _this = this;
         this.app[method](path, function (req, res) {
             //        console.log('server recieved query request.')
             _this.process_user_http(req, res, action);
@@ -1094,8 +1094,8 @@ var Lawn = (function (_super) {
     };
 
     Lawn.prototype.start_sockets = function (port) {
-        var _this = this;
         if (typeof port === "undefined") { port = null; }
+        var _this = this;
         var socket_io = require('socket.io');
         port = port || this.config.ports.websocket;
         console.log('Starting Socket.IO on port ' + port);
@@ -1132,11 +1132,6 @@ var Lawn = (function (_super) {
         var _this = this;
         if (!port)
             return;
-
-        if (typeof this.config.max_connections == 'number') {
-            var http = require('http');
-            http.globalAgent.maxSockets = this.config.max_connections;
-        }
 
         var express = require('express');
         var app = this.app = express();
@@ -1240,7 +1235,23 @@ var Lawn = (function (_super) {
         console.log('HTTP listening on port ' + port + '.');
 
         this.invoke('http.start', app, this);
-        this.http = app.listen(port);
+
+        var http = require(this.config.ssl ? 'https' : 'http');
+        if (typeof this.config.max_connections == 'number') {
+            http.globalAgent.maxSockets = this.config.max_connections;
+        }
+
+        var options = {};
+        var ssl = this.config.ssl;
+        if (ssl) {
+            var fs = require('fs');
+            options['cert'] = fs.readFileSync(ssl.cert, 'ascii');
+            options['key'] = fs.readFileSync(ssl.key, 'ascii');
+            console.log("Using SSL");
+        }
+
+        var server = http.createServer(options, app);
+        this.http = server.listen(port);
     };
 
     Lawn.prototype.stop = function () {
@@ -1422,17 +1433,6 @@ var Lawn;
 })(Lawn || (Lawn = {}));
 Lawn.HttpError = HttpError;
 Lawn.Irrigation = Irrigation;
-/**
-* User: Chris Johnson
-* Date: 11/9/2014
-*/
-/// <reference path="../../vineyard/vineyard.d.ts"/>
-///<reference path="../defs/socket.io.extension.d.ts"/>
-///<reference path="../defs/express.d.ts"/>
-/// <reference path="common.ts"/>
-/// <reference path="gardener.ts"/>
-/// <reference path="irrigation.ts"/>
-/// <reference path="lawn.ts"/>
 /**
 * User: Chris Johnson
 * Date: 11/9/2014
